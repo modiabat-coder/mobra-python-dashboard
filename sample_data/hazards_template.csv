@@ -1,0 +1,2 @@
+hazard_id,hazard,hazard_category,domain,activity,biological_agent,cause,existing_controls,likelihood,consequence,residual_likelihood,residual_consequence,corrective_action,responsible_person,status,due_date
+H001,Example hazard,Example,Sample processing,Example activity,Example agent,Example cause,Existing control,1,1,1,1,Example action,Responsible person,Open,2026-12-31

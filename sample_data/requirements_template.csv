@@ -1,0 +1,2 @@
+requirement_id,domain,requirement,objective_evidence,observed_score,maximum_score,critical_control,compliance_status,corrective_action,responsible_person,due_date
+R001,Governance,Example requirement,Example evidence,5,5,FALSE,Compliant,Example action,Responsible person,2026-12-31

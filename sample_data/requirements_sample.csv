@@ -1,0 +1,61 @@
+requirement_id,domain,requirement,observed_score,maximum_score,critical_control,evidence
+R001,Governance,Approved mission-specific biorisk assessment,5,5,TRUE,Signed assessment record
+R002,Governance,Defined command and escalation structure,4,5,FALSE,Organogram and contact list
+R003,Governance,Stop-work authority is documented,3,5,TRUE,SOP section incomplete
+R004,Personnel,Roles and responsibilities are assigned,5,5,FALSE,Duty roster
+R005,Personnel,Medical surveillance is current,4,5,FALSE,Occupational health records
+R006,Training,Competency records are verified before deployment,3,5,TRUE,Two records pending
+R007,Training,Emergency drills are completed and documented,4,5,FALSE,Drill report
+R008,Facility,Negative-pressure performance is verified,5,5,TRUE,Pressure test certificate
+R009,Facility,Operator and laboratory environments are separated,5,5,TRUE,Engineering drawing
+R010,Facility,Pass-box interlock is functional,4,5,FALSE,Pre-deployment checklist
+R011,Containment,Class II BSC certification is valid,5,5,TRUE,Certification report
+R012,Containment,Class III glovebox integrity is verified,5,5,TRUE,Leak-test record
+R013,Containment,Spill response materials are accessible,5,5,FALSE,Inspection checklist
+R014,Sample management,Chain of custody is documented,4,5,FALSE,Sample log
+R015,Sample management,Triple packaging is available and compliant,5,5,TRUE,Packaging inventory
+R016,Molecular diagnostics,Unidirectional workflow is implemented,5,5,FALSE,Layout inspection
+R017,Molecular diagnostics,Internal and external controls are defined,5,5,TRUE,Assay SOP
+R018,Quality management,Two-identifier specimen verification is applied,4,5,FALSE,Audit record
+R019,Quality management,Nonconformities and corrective actions are tracked,4,5,FALSE,CAPA log
+R020,Equipment,Preventive maintenance status is current,4,5,FALSE,Maintenance register
+R021,Equipment,Critical equipment has backup capacity,3,5,TRUE,Backup extraction system unavailable
+R022,Cold storage,Temperature monitoring and alarms are functional,5,5,TRUE,Temperature log
+R023,Cold storage,Contingency storage is available,4,5,FALSE,Backup freezer agreement
+R024,Waste management,Validated autoclave cycles are documented,4,5,TRUE,Biological indicator report
+R025,Waste management,Waste segregation is consistently applied,4,5,FALSE,Inspection record
+R026,Decontamination,Disinfectant selection and concentration are validated,5,5,TRUE,Validation record
+R027,Decontamination,Contact times are specified in SOPs,5,5,FALSE,SOP review
+R028,Security,Access control is restricted and logged,4,5,TRUE,Access log
+R029,Security,Pathogen inventory reconciliation is current,5,5,TRUE,Inventory report
+R030,Security,Visitor access is controlled and escorted,4,5,FALSE,Visitor log
+R031,Information security,User access follows least-privilege principles,4,5,FALSE,Permissions review
+R032,Information security,Backups are tested for restoration,3,5,TRUE,Restoration test overdue
+R033,Emergency response,Incident notification procedures are available,5,5,TRUE,Incident SOP
+R034,Emergency response,Exposure management pathway is defined,5,5,TRUE,Post-exposure protocol
+R035,Emergency response,Evacuation routes are marked and unobstructed,5,5,FALSE,Inspection record
+R036,Supply chain,Critical consumable levels meet mission demand,4,5,TRUE,Inventory forecast
+R037,Supply chain,Alternative suppliers are identified,3,5,FALSE,Supplier list
+R038,Transport,Vehicle and specimen transport conditions are verified,5,5,TRUE,Transport checklist
+R039,Transport,Route and security contingencies are planned,4,5,FALSE,Mission plan
+R040,Continuity,UPS and generator capacity are tested,4,5,TRUE,Load-test report
+R041,Continuity,Communications redundancy is tested,3,5,FALSE,Radio test record
+R042,Occupational safety,PPE selection is task-specific,5,5,TRUE,PPE matrix
+R043,Occupational safety,Donning and doffing competency is observed,4,5,TRUE,Competency checklist
+R044,Occupational safety,Sharps prevention controls are implemented,5,5,FALSE,Sharps SOP
+R045,Data management,Result authorization roles are defined,5,5,FALSE,LIMS roles
+R046,Data management,Audit trails are preserved,4,5,FALSE,System audit
+R047,Validation,Assays are verified for intended specimen types,5,5,TRUE,Verification report
+R048,Validation,Quality-control acceptance criteria are predefined,5,5,TRUE,QC SOP
+R049,Documentation,Current SOPs are available at point of use,4,5,FALSE,Document register
+R050,Documentation,Obsolete documents are removed,5,5,FALSE,Document-control audit
+R051,Maintenance,Calibration status is clearly labeled,4,5,FALSE,Calibration labels
+R052,Maintenance,Service support is available during deployment,3,5,FALSE,Service contact plan
+R053,Human factors,Fatigue and shift duration are managed,4,5,FALSE,Shift roster
+R054,Human factors,Two-person verification is used for critical tasks,4,5,FALSE,Observed practice
+R055,Environment,Weather and terrain risks are assessed,5,5,FALSE,Site assessment
+R056,Environment,Environmental release controls are defined,5,5,TRUE,Containment SOP
+R057,Deployment,Pre-deployment readiness review is completed,4,5,TRUE,Readiness checklist
+R058,Deployment,Deployment decision is formally authorized,4,5,TRUE,Approval pending
+R059,Demobilization,Exit decontamination is documented,5,5,TRUE,Demobilization SOP
+R060,Demobilization,Post-mission review and lessons learned are scheduled,4,5,FALSE,Review calendar

@@ -1,0 +1,25 @@
+hazard_id,hazard,domain,activity,cause,likelihood,consequence,existing_controls,recommended_action,owner,status
+H001,Aerosol generation during centrifugation,Sample processing,Centrifugation,Rotor or tube failure,3,5,Sealed rotor and BSC,Inspect rotors and reinforce SOP,Laboratory supervisor,Open
+H002,Specimen leakage during transport,Transport,Sample transport,Packaging failure,3,4,Triple packaging,Refresh packaging competency,Logistics officer,Open
+H003,Unauthorized access to pathogen storage,Security,Cold storage,Access control failure,2,5,Restricted access and logs,Implement electronic access review,Biosecurity officer,Open
+H004,Loss of negative pressure,Engineering controls,Laboratory operation,HVAC failure,2,5,Pressure alarms and maintenance,Test emergency shutdown procedure,Facility engineer,Open
+H005,Needlestick injury,Occupational safety,Sample handling,Unsafe sharps practice,3,3,Sharps containers and training,Audit sharps handling,Biosafety officer,Monitoring
+H006,Incorrect specimen identification,Quality management,Pre-analytical process,Labeling error,4,3,Two-identifier check,Introduce barcode verification,Quality manager,Open
+H007,PCR contamination,Molecular diagnostics,PCR preparation,Workflow crossover,4,2,Unidirectional workflow,Strengthen zoning and cleaning,Molecular lead,Monitoring
+H008,Autoclave cycle failure,Waste management,Decontamination,Equipment malfunction,2,4,Cycle indicators,Preventive maintenance and load validation,Waste officer,Open
+H009,Power interruption during testing,Continuity,Testing,Generator transfer delay,3,3,UPS and generator,Conduct load testing,Facility engineer,Open
+H010,Cold-chain excursion,Cold storage,Reagent storage,Temperature control failure,2,3,Continuous monitoring,Add escalation alerts,Store manager,Monitoring
+H011,Inadequate PPE doffing,Training,PPE removal,Competency gap,3,4,Buddy system and checklist,Repeat observed competency assessment,Training officer,Open
+H012,Data loss or unauthorized modification,Information security,Result management,Cybersecurity weakness,2,4,Backups and user roles,Test restoration and review permissions,IT officer,Open
+H013,Spill inside Class II BSC,Containment,Sample processing,Handling error,3,3,Spill kit and SOP,Run spill-response drill,Biosafety officer,Open
+H014,Failure of Class III glovebox glove,Containment,High-risk manipulation,Material degradation,2,5,Pre-use inspection,Implement pressure-decay and glove tests,Containment lead,Open
+H015,Delayed incident reporting,Governance,Incident response,Unclear escalation pathway,3,3,Incident forms,Define reporting timelines and roles,Programme manager,Open
+H016,Unverified staff competency,Training,Deployment preparation,Incomplete records,3,4,Training matrix,Block assignment until competency verified,Training officer,Open
+H017,Improper waste segregation,Waste management,Waste handling,Knowledge gap,3,3,Color-coded containers,Audit segregation points,Waste officer,Monitoring
+H018,Pass-box interlock failure,Engineering controls,Material transfer,Mechanical failure,2,4,Interlock checks,Schedule preventive maintenance,Facility engineer,Open
+H019,Reagent stockout,Supply chain,Testing preparation,Inventory failure,3,2,Minimum stock levels,Use automated reorder thresholds,Logistics officer,Monitoring
+H020,Communication failure during field mission,Emergency response,Deployment,Network outage,3,3,Radio and backup contacts,Conduct communications drill,Mission commander,Open
+H021,Uncontrolled visitor entry,Security,Site access,Escort failure,2,4,Visitor log,Enforce escort policy,Security officer,Open
+H022,Incorrect decontamination concentration,Decontamination,Cleaning,Dilution error,3,3,Preparation chart,Use verified preparation records,Biosafety officer,Open
+H023,Fire inside mobile laboratory,Emergency response,Laboratory operation,Electrical fault,1,5,Extinguishers and alarms,Inspect electrical load and evacuation plan,Facility engineer,Open
+H024,Extreme residual risk not escalated,Governance,Risk review,Management override failure,2,5,Risk register,Require documented approval and stop-work authority,Programme manager,Open
