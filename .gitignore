@@ -3,3 +3,6 @@ __pycache__/
 .pytest_cache/
 *.pyc
 .DS_Store
+
+MOBRA_v1.0.0_Final_Release/
+MOBRA_v1.0.0_Final_Release.zip
