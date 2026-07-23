@@ -10,13 +10,65 @@ from typing import Any
 import pandas as pd
 import streamlit as st
 
-from mobra.charts import bri_gauge, domain_figure, heatmap_figure, risk_counts_figure
+from mobra.acceptance import (
+    ACCEPTANCE_DISPOSITIONS,
+    MISSING_RESIDUAL_POLICIES,
+    RISK_ACCEPTANCE_LIMITATION,
+    RiskAcceptancePolicy,
+    apply_risk_acceptance,
+    risk_acceptance_summary,
+    risk_acceptance_summary_table,
+)
+from mobra.charts import bri_gauge, domain_figure, heatmap_figure, mapping_sankey_figure, risk_counts_figure
+from mobra.critical_controls import (
+    CONTROL_OUTCOMES,
+    CRITICAL_CONTROL_LIMITATION,
+    CRITICALITY_LEVELS,
+    CriticalControlAssessment,
+    CriticalControlProfileValidationResult,
+    assess_critical_controls,
+    critical_control_summary_table,
+)
 from mobra.decisions import deployment_decision
-from mobra.io import list_excel_sheets, read_data_file, source_name, split_unified_file
+from mobra.export_contracts import EXCEL_SHEETS, EXPORT_FILENAMES
+from mobra.io import (
+    FileValidationError,
+    list_excel_sheets,
+    read_data_file,
+    read_data_file_with_validation,
+    source_name,
+    split_unified_file,
+)
+from mobra.mapping import (
+    ALLOWED_CONTROL_ROLES,
+    ALLOWED_RELATIONSHIP_TYPES,
+    MAPPING_REQUIRED_COLUMNS,
+    MappingValidationResult,
+    coverage_by_requirement_domain,
+    enrich_mapping,
+    hazard_mapping_ranking,
+    hazards_without_requirements,
+    mapping_coverage_summary,
+    mapping_coverage_table,
+    requirement_mapping_ranking,
+    requirements_without_hazards,
+    validate_mapping,
+)
 from mobra.readiness import calculate_bri, data_quality_summary, domain_readiness, failed_critical_controls
 from mobra.reporting import make_html_report
-from mobra.risk import RISK_LEVELS, assert_heatmap_total, classify_risk, heatmap_total
+from mobra.risk import RISK_LEVELS, assert_heatmap_total, heatmap_total
 from mobra.validation import ValidationResult, normalise_columns, validate_hazards, validate_requirements
+from mobra.validation_exports import invalid_records_workbook_bytes, validation_json_fields, write_validation_sheets
+from mobra.validation_findings import (
+    VALIDATION_LIMITATION,
+    CrossDatasetValidationResult,
+    ValidationFinding,
+    findings_frame,
+    summaries_frame,
+    validate_cross_dataset_consistency,
+    validation_overview,
+    validation_summary,
+)
 
 # Backward-compatible names used by the original prototype and notebooks.
 read_uploaded_file = read_data_file
@@ -33,13 +85,57 @@ def csv_bytes(df: pd.DataFrame) -> bytes:
     return df.to_csv(index=False).encode("utf-8-sig")
 
 
-def excel_bytes(hazards: pd.DataFrame, requirements: pd.DataFrame, summary: dict[str, Any]) -> bytes:
+def excel_bytes(
+    hazards: pd.DataFrame,
+    requirements: pd.DataFrame,
+    summary: dict[str, Any],
+    mapping: pd.DataFrame | None = None,
+    risk_acceptance_policy: RiskAcceptancePolicy | None = None,
+    critical_profile: pd.DataFrame | None = None,
+    critical_control_assessment: CriticalControlAssessment | None = None,
+    validation_summaries: list[dict[str, Any]] | None = None,
+    validation_findings: list[ValidationFinding] | None = None,
+    validation_datasets: dict[str, pd.DataFrame | None] | None = None,
+) -> bytes:
     """Create a portable Excel workbook containing analyzed data and summary."""
+    acceptance_policy = risk_acceptance_policy or RiskAcceptancePolicy()
+    analyzed_hazards = (
+        hazards if "risk_acceptance_status" in hazards.columns else apply_risk_acceptance(hazards, acceptance_policy)
+    )
     buffer = io.BytesIO()
     with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
-        hazards.to_excel(writer, sheet_name="Analyzed_Hazards", index=False)
-        requirements.to_excel(writer, sheet_name="Analyzed_Requirements", index=False)
-        pd.DataFrame([summary]).to_excel(writer, sheet_name="Summary", index=False)
+        analyzed_hazards.to_excel(writer, sheet_name=EXCEL_SHEETS["hazards"], index=False)
+        requirements.to_excel(writer, sheet_name=EXCEL_SHEETS["requirements"], index=False)
+        pd.DataFrame([summary]).to_excel(writer, sheet_name=EXCEL_SHEETS["summary"], index=False)
+        if mapping is not None:
+            mapping.to_excel(writer, sheet_name=EXCEL_SHEETS["mapping"], index=False)
+        risk_acceptance_summary_table(analyzed_hazards, acceptance_policy).to_excel(
+            writer,
+            sheet_name=EXCEL_SHEETS["risk_acceptance"],
+            index=False,
+        )
+        if critical_profile is not None and critical_control_assessment is not None and critical_control_assessment.ok:
+            critical_profile.to_excel(writer, sheet_name=EXCEL_SHEETS["critical_profile"], index=False)
+            critical_control_assessment.data.to_excel(
+                writer, sheet_name=EXCEL_SHEETS["critical_assessment"], index=False
+            )
+            critical_control_summary_table(critical_control_assessment).to_excel(
+                writer,
+                sheet_name=EXCEL_SHEETS["critical_summary"],
+                index=False,
+            )
+        write_validation_sheets(
+            writer,
+            validation_summaries or [],
+            validation_findings or [],
+            validation_datasets
+            or {
+                "Hazards": hazards,
+                "Requirements": requirements,
+                "Mapping": mapping,
+                "Critical-Control Profile": critical_profile,
+            },
+        )
     return buffer.getvalue()
 
 
@@ -49,12 +145,23 @@ def _file_selector(label: str, file: Any) -> tuple[pd.DataFrame | None, str]:
         return None, ""
     name = source_name(file)
     sheet: str | int = 0
-    sheets = list_excel_sheets(file)
-    if sheets:
-        sheet = st.selectbox(f"Excel sheet — {name}", sheets, key=f"sheet_{label}_{name}")
     try:
-        return read_data_file(file, sheet_name=sheet), name
-    except Exception as exc:  # pragma: no cover - displayed by Streamlit
+        sheets = list_excel_sheets(file)
+        if sheets:
+            sheet = st.selectbox(f"Excel sheet — {name}", sheets, key=f"sheet_{label}_{name}")
+        result = read_data_file_with_validation(file, sheet_name=sheet)
+        st.session_state.setdefault("_mobra_file_findings", []).extend(result.findings)
+        st.session_state.setdefault("_mobra_file_sheets", {})[name] = result.sheet_name
+        for warning in result.warnings[:5]:
+            st.warning(warning)
+        if result.errors:
+            for message in result.errors[:5]:
+                st.error(message)
+            return None, name
+        return result.data, name
+    except (FileValidationError, ValueError, OSError) as exc:  # pragma: no cover - displayed by Streamlit
+        fallback = read_data_file_with_validation(file, sheet_name=0)
+        st.session_state.setdefault("_mobra_file_findings", []).extend(fallback.findings)
         st.error(f"Could not read {name}: {exc}")
         return None, name
 
@@ -62,10 +169,15 @@ def _file_selector(label: str, file: Any) -> tuple[pd.DataFrame | None, str]:
 def _mapping_controls(df: pd.DataFrame, kind: str) -> dict[str, str]:
     """Render manual overrides for the required fields while retaining auto-mapping."""
     normalized = normalise_columns(df)
-    targets = {"hazards": ["hazard", "likelihood", "consequence"], "requirements": ["requirement", "observed_score", "maximum_score"]}[kind]
+    targets = {
+        "hazards": ["hazard", "likelihood", "consequence"],
+        "requirements": ["requirement", "observed_score", "maximum_score"],
+    }[kind]
     overrides: dict[str, str] = {}
     with st.expander(f"Optional {kind} column overrides", expanded=False):
-        st.caption("Automatic aliases are applied first. Choose a source column only when automatic mapping needs help.")
+        st.caption(
+            "Automatic aliases are applied first. Choose a source column only when automatic mapping needs help."
+        )
         for target in targets:
             options = ["(automatic)", *normalized.columns.tolist()]
             selected = st.selectbox(target, options, key=f"override_{kind}_{target}")
@@ -83,54 +195,670 @@ def _preview_editor(df: pd.DataFrame, label: str) -> pd.DataFrame:
     return df
 
 
-def _show_validation(result: ValidationResult, label: str) -> None:
+def _show_validation(
+    result: ValidationResult | MappingValidationResult | CriticalControlProfileValidationResult,
+    label: str,
+) -> None:
     with st.expander(f"{label} validation details", expanded=bool(result.errors or result.warnings)):
         if result.errors:
-            for message in result.errors:
+            for message in result.errors[:10]:
                 st.error(message)
+            if len(result.errors) > 10:
+                st.caption(f"{len(result.errors) - 10} additional errors are available in validation downloads.")
         if result.warnings:
-            for message in result.warnings:
+            for message in result.warnings[:10]:
                 st.warning(message)
+            if len(result.warnings) > 10:
+                st.caption(f"{len(result.warnings) - 10} additional warnings are available in validation downloads.")
+        information = getattr(result, "information", [])
+        for message in information[:5]:
+            st.info(message)
+        if getattr(result, "findings", None):
+            st.dataframe(findings_frame(result.findings), use_container_width=True, hide_index=True)
         st.json(result.quality)
 
 
-def _load_inputs() -> tuple[pd.DataFrame | None, pd.DataFrame | None, str, str]:
+def _load_inputs() -> tuple[
+    pd.DataFrame | None,
+    pd.DataFrame | None,
+    pd.DataFrame | None,
+    pd.DataFrame | None,
+    str,
+    str,
+    str,
+    str,
+]:
     with st.sidebar:
         st.header("Data input")
         mode = st.radio("Input mode", ["Included demonstration data", "Two files", "One unified file"], index=0)
+        mapping_file = st.file_uploader(
+            "Requirement–hazard mapping (optional override)",
+            type=["csv", "xlsx", "xls"],
+            key="mapping_upload",
+        )
+        profile_file = st.file_uploader(
+            "Critical-control profile (optional override)",
+            type=["csv", "xlsx", "xls"],
+            key="critical_profile_upload",
+        )
+        if mapping_file is not None:
+            mapping_df, mapping_name = _file_selector("mapping", mapping_file)
+        elif mode == "Included demonstration data":
+            mapping_df = pd.read_csv(BASE_DIR / "sample_data" / "requirement_hazard_mapping.csv")
+            mapping_name = "requirement_hazard_mapping.csv"
+        else:
+            mapping_df, mapping_name = None, ""
+        if profile_file is not None:
+            profile_df, profile_name = _file_selector("critical_profile", profile_file)
+        elif mode == "Included demonstration data":
+            profile_df = pd.read_csv(BASE_DIR / "sample_data" / "critical_control_profile.csv")
+            profile_name = "critical_control_profile.csv"
+        else:
+            profile_df, profile_name = None, ""
         if mode == "Included demonstration data":
             return (
                 pd.read_csv(BASE_DIR / "sample_data" / "hazards_sample.csv"),
                 pd.read_csv(BASE_DIR / "sample_data" / "requirements_sample.csv"),
+                mapping_df,
+                profile_df,
                 "hazards_sample.csv",
                 "requirements_sample.csv",
+                mapping_name,
+                profile_name,
             )
         if mode == "Two files":
             hazard_file = st.file_uploader("Hazard register", type=["csv", "xlsx", "xls"], key="hazard_upload")
-            requirement_file = st.file_uploader("Operational requirements / ORL", type=["csv", "xlsx", "xls"], key="requirements_upload")
+            requirement_file = st.file_uploader(
+                "Operational requirements / ORL", type=["csv", "xlsx", "xls"], key="requirements_upload"
+            )
             hazard_df, hazard_name = _file_selector("hazard", hazard_file)
             requirement_df, requirement_name = _file_selector("requirement", requirement_file)
-            return hazard_df, requirement_df, hazard_name, requirement_name
-        unified_file = st.file_uploader("Unified hazard + requirements file", type=["csv", "xlsx", "xls"], key="unified_upload")
+            return (
+                hazard_df,
+                requirement_df,
+                mapping_df,
+                profile_df,
+                hazard_name,
+                requirement_name,
+                mapping_name,
+                profile_name,
+            )
+        unified_file = st.file_uploader(
+            "Unified hazard + requirements file", type=["csv", "xlsx", "xls"], key="unified_upload"
+        )
         unified_df, unified_name = _file_selector("unified", unified_file)
         if unified_df is None:
-            return None, None, unified_name, unified_name
+            return None, None, mapping_df, profile_df, unified_name, unified_name, mapping_name, profile_name
         try:
             hazards, requirements = split_unified_file(unified_df)
-            return hazards, requirements, unified_name, unified_name
+            return hazards, requirements, mapping_df, profile_df, unified_name, unified_name, mapping_name, profile_name
         except ValueError as exc:
             st.error(str(exc))
-            return None, None, unified_name, unified_name
+            return None, None, mapping_df, profile_df, unified_name, unified_name, mapping_name, profile_name
+
+
+def _render_mapping_analysis(mapping: pd.DataFrame, requirements: pd.DataFrame, hazards: pd.DataFrame) -> None:
+    """Render coverage findings filters details and readable mapping analyses."""
+    summary = mapping_coverage_summary(mapping, requirements, hazards)
+    details = enrich_mapping(mapping, requirements, hazards)
+    unmapped_hazards = hazards_without_requirements(mapping, hazards)
+    unmapped_requirements = requirements_without_hazards(mapping, requirements)
+    st.caption(
+        "The included links are representative demonstration mappings for software verification and methodology illustration. "
+        "They are not expert-validated scientific or institutional mappings."
+    )
+
+    metric1, metric2, metric3, metric4 = st.columns(4)
+    metric1.metric("Mapping links", summary["mapping_links"])
+    metric2.metric(
+        "Hazards mapped",
+        f'{summary["hazards_mapped"]} / {summary["hazards_total"]}',
+        f'{summary["hazard_coverage_pct"]:.1f}%',
+    )
+    metric3.metric(
+        "Requirements mapped",
+        f'{summary["requirements_mapped"]} / {summary["requirements_total"]}',
+        f'{summary["requirement_coverage_pct"]:.1f}%',
+    )
+    metric4.metric("Critical links", summary["critical_links"])
+
+    selected_hazard = st.selectbox(
+        "Selected hazard details",
+        sorted(hazards["hazard_id"].astype(str).unique()),
+        key="mapping_selected_hazard",
+    )
+    selected_details = details.loc[details["hazard_id"].eq(selected_hazard)].copy()
+    if not selected_details.empty:
+        hazard_name = selected_details["hazard_name"].iloc[0]
+        st.subheader(f"{selected_hazard} — {hazard_name}")
+        selected_columns = [
+            "requirement_id",
+            "requirement_wording",
+            "requirement_domain",
+            "objective_evidence",
+            "relationship_type",
+            "mapping_rationale",
+            "control_role",
+            "critical_link",
+        ]
+        st.dataframe(selected_details[selected_columns], use_container_width=True, hide_index=True)
+        st.plotly_chart(
+            mapping_sankey_figure(selected_details, selected_hazard),
+            use_container_width=True,
+            key="selected_hazard_mapping_sankey",
+        )
+
+    st.subheader("Mapping filters and table")
+    filter1, filter2, filter3 = st.columns(3)
+    with filter1:
+        hazard_filter = st.multiselect(
+            "Filter by hazard ID",
+            sorted(details["hazard_id"].dropna().astype(str).unique()),
+            key="mapping_hazard_filter",
+        )
+        requirement_filter = st.multiselect(
+            "Filter by requirement ID",
+            sorted(details["requirement_id"].dropna().astype(str).unique()),
+            key="mapping_requirement_filter",
+        )
+    with filter2:
+        relationship_filter = st.multiselect(
+            "Filter by relationship type",
+            list(ALLOWED_RELATIONSHIP_TYPES),
+            key="mapping_relationship_filter",
+        )
+        role_filter = st.multiselect(
+            "Filter by control role",
+            list(ALLOWED_CONTROL_ROLES),
+            key="mapping_role_filter",
+        )
+    with filter3:
+        critical_filter = st.selectbox(
+            "Filter by critical link",
+            ["All", "TRUE", "FALSE"],
+            key="mapping_critical_filter",
+        )
+
+    filtered = details.copy()
+    if hazard_filter:
+        filtered = filtered[filtered["hazard_id"].isin(hazard_filter)]
+    if requirement_filter:
+        filtered = filtered[filtered["requirement_id"].isin(requirement_filter)]
+    if relationship_filter:
+        filtered = filtered[filtered["relationship_type"].isin(relationship_filter)]
+    if role_filter:
+        filtered = filtered[filtered["control_role"].isin(role_filter)]
+    if critical_filter != "All":
+        filtered = filtered[filtered["critical_link"].eq(critical_filter == "TRUE")]
+    mapping_columns = [
+        "mapping_id",
+        "requirement_id",
+        "requirement_wording",
+        "requirement_domain",
+        "objective_evidence",
+        "hazard_id",
+        "hazard_name",
+        "relationship_type",
+        "mapping_rationale",
+        "control_role",
+        "critical_link",
+        "source_status",
+    ]
+    st.caption(f"Showing {len(filtered)} of {len(details)} mapping links.")
+    st.dataframe(filtered[mapping_columns], use_container_width=True, hide_index=True)
+
+    st.subheader("Coverage findings")
+    finding1, finding2 = st.columns(2)
+    with finding1:
+        st.write("Hazards without requirements")
+        st.dataframe(
+            unmapped_hazards[[column for column in ("hazard_id", "hazard", "domain") if column in unmapped_hazards]],
+            use_container_width=True,
+            hide_index=True,
+        )
+    with finding2:
+        st.write("Requirements without hazards")
+        st.dataframe(
+            unmapped_requirements[
+                [
+                    column
+                    for column in ("requirement_id", "requirement", "domain", "objective_evidence", "evidence")
+                    if column in unmapped_requirements
+                ]
+            ],
+            use_container_width=True,
+            hide_index=True,
+        )
+
+    st.subheader("Link rankings")
+    rank1, rank2 = st.columns(2)
+    with rank1:
+        st.write("Hazards ranked by linked requirements")
+        st.dataframe(hazard_mapping_ranking(mapping, hazards), use_container_width=True, hide_index=True)
+    with rank2:
+        st.write("Requirements ranked by linked hazards")
+        st.dataframe(requirement_mapping_ranking(mapping, requirements), use_container_width=True, hide_index=True)
+
+    st.subheader("Coverage by requirement domain")
+    st.dataframe(coverage_by_requirement_domain(mapping, requirements), use_container_width=True, hide_index=True)
+    st.subheader("Critical-link summary")
+    critical_links = details.loc[details["critical_link"].fillna(False).astype(bool)]
+    critical_summary = (
+        critical_links.groupby(["relationship_type", "control_role"], dropna=False)
+        .size()
+        .rename("critical_links")
+        .reset_index()
+        .sort_values("critical_links", ascending=False)
+    )
+    st.dataframe(critical_summary, use_container_width=True, hide_index=True)
+    with st.expander("Critical-link details", expanded=False):
+        st.dataframe(critical_links[mapping_columns], use_container_width=True, hide_index=True)
+
+
+def _render_critical_control_governance(assessment: CriticalControlAssessment) -> None:
+    """Render structured score, evidence, completeness, and disposition findings."""
+    summary = assessment.summary
+    data = assessment.data
+    st.warning(CRITICAL_CONTROL_LIMITATION)
+    st.info("A high BRI cannot override a deployment-blocking critical-control failure.")
+
+    level_counts = summary["criticality_level_counts"]
+    row1 = st.columns(4)
+    row1[0].metric("Deployment-blocking controls", level_counts["Deployment-blocking"])
+    row1[1].metric("Conditional controls", level_counts["Conditional"])
+    row1[2].metric("Important controls", level_counts["Important"])
+    row1[3].metric("Passed controls", summary["critical_control_outcome_counts"]["Pass"])
+    row2 = st.columns(4)
+    row2[0].metric("Deployment-blocking failures", summary["deployment_blocking_failure_count"])
+    row2[1].metric("Conditional gaps", summary["conditional_gap_count"])
+    row2[2].metric("Evidence deficiencies", summary["evidence_deficiency_count"])
+    row2[3].metric("Incomplete records", summary["incomplete_critical_record_count"])
+    row3 = st.columns(3)
+    row3[0].metric("Manual-review items", summary["manual_review_count"])
+    row3[1].metric("Formal approvals required", summary["formal_approval_required_count"])
+    row3[2].metric("Compensating controls required", summary["compensating_control_required_count"])
+
+    st.subheader("Governance filters and detailed assessment")
+    filters1 = st.columns(3)
+    filters2 = st.columns(3)
+    with filters1[0]:
+        selected_levels = st.multiselect("Criticality level", CRITICALITY_LEVELS, key="governance_level_filter")
+    with filters1[1]:
+        selected_outcomes = st.multiselect("Outcome", CONTROL_OUTCOMES, key="governance_outcome_filter")
+    with filters1[2]:
+        selected_dispositions = st.multiselect(
+            "Disposition",
+            sorted(data["critical_control_disposition"].dropna().astype(str).unique()),
+            key="governance_disposition_filter",
+        )
+    with filters2[0]:
+        selected_domains = st.multiselect("Domain", _filter_values(data, "domain"), key="governance_domain_filter")
+    with filters2[1]:
+        selected_evidence = st.multiselect(
+            "Evidence status",
+            ["Complete", "Missing", "Incomplete", "Not assessed"],
+            key="governance_evidence_filter",
+        )
+    with filters2[2]:
+        selected_ids = st.multiselect(
+            "Requirement ID",
+            _filter_values(data, "requirement_id"),
+            key="governance_requirement_filter",
+        )
+
+    filtered = data.copy()
+    for column, values in (
+        ("criticality_level", selected_levels),
+        ("critical_control_outcome", selected_outcomes),
+        ("critical_control_disposition", selected_dispositions),
+        ("domain", selected_domains),
+        ("evidence_status", selected_evidence),
+        ("requirement_id", selected_ids),
+    ):
+        if values:
+            filtered = filtered[filtered[column].astype(str).isin(values)]
+    columns = [
+        "requirement_id",
+        "requirement",
+        "domain",
+        "observed_score",
+        "maximum_score",
+        "minimum_acceptable_score",
+        "objective_evidence",
+        "evidence",
+        "evidence_status",
+        "completion_status",
+        "criticality_level",
+        "critical_control_outcome",
+        "critical_control_disposition",
+        "critical_control_reason",
+        "rationale",
+        "approval_status",
+    ]
+    st.caption(f"Showing {len(filtered)} of {len(data)} governed requirements.")
+    st.dataframe(
+        filtered[[column for column in columns if column in filtered]], use_container_width=True, hide_index=True
+    )
+
+    finding_tables = (
+        ("Deployment-blocking failures", assessment.deployment_blocking_failures),
+        ("Conditional gaps", assessment.conditional_gaps),
+        ("Important corrective-action findings", assessment.important_gaps),
+        ("Evidence deficiencies", assessment.evidence_deficiencies),
+        ("Incomplete critical records", assessment.incomplete_records),
+        ("Manual-review items", assessment.manual_review_items),
+    )
+    for title, findings in finding_tables:
+        with st.expander(f"{title} ({len(findings)})", expanded=title == "Deployment-blocking failures"):
+            st.dataframe(
+                findings[[column for column in columns if column in findings]],
+                use_container_width=True,
+                hide_index=True,
+            )
+
+
+def _risk_acceptance_policy_controls() -> RiskAcceptancePolicy:
+    """Expose the two missing-residual controls while retaining safe defaults."""
+    with st.sidebar.expander("Risk acceptance policy", expanded=False):
+        st.caption("Provisional software rules for decision support; institutional approval is required.")
+        missing_policy = st.selectbox(
+            "Missing residual-risk policy",
+            MISSING_RESIDUAL_POLICIES,
+            format_func=lambda value: value.replace("_", " ").capitalize(),
+            key="missing_residual_policy",
+        )
+        require_for_ready = st.checkbox(
+            "Require residual assessment for READY",
+            value=False,
+            key="require_residual_for_ready",
+        )
+    return RiskAcceptancePolicy(
+        missing_residual_policy=missing_policy,
+        require_residual_for_ready_decision=require_for_ready,
+    )
+
+
+def _filter_values(data: pd.DataFrame, column: str) -> list[str]:
+    if column not in data.columns:
+        return []
+    return sorted(data[column].dropna().astype(str).unique().tolist())
+
+
+def _render_risk_acceptance(hazards: pd.DataFrame, policy: RiskAcceptancePolicy) -> None:
+    """Render transparent source, disposition, action, and filtering details."""
+    summary = risk_acceptance_summary(hazards, policy)
+    source = summary["risk_source_summary"]
+    st.subheader("Risk Acceptance")
+    st.warning(RISK_ACCEPTANCE_LIMITATION)
+    metric1, metric2, metric3, metric4, metric5 = st.columns(5)
+    metric1.metric("Risk source used", source["risk_source_display"])
+    metric2.metric("Corrective action required", summary["corrective_action_required_count"])
+    metric3.metric("Formal approval required", summary["formal_approval_required_count"])
+    metric4.metric("Missing residual assessment", summary["missing_residual_assessment_count"])
+    metric5.metric("Unacceptable hazards", summary["unacceptable_hazard_count"])
+    if source["inherent_screening_hazard_count"]:
+        st.info(
+            f"Inherent risk was used for screening for {source['inherent_screening_hazard_count']} hazard(s); "
+            "residual assessment was not provided for those records."
+        )
+
+    status_table = pd.DataFrame(
+        {
+            "risk_acceptance_status": ACCEPTANCE_DISPOSITIONS,
+            "hazard_count": [summary["acceptance_status_counts"][status] for status in ACCEPTANCE_DISPOSITIONS],
+        }
+    )
+    st.caption("Hazards by provisional acceptance status")
+    st.dataframe(status_table, use_container_width=True, hide_index=True)
+
+    st.caption("Filter the per-hazard risk-acceptance table")
+    row1 = st.columns(3)
+    row2 = st.columns(3)
+    with row1[0]:
+        selected_acceptance = st.multiselect(
+            "Acceptance status",
+            ACCEPTANCE_DISPOSITIONS,
+            key="acceptance_status_filter",
+        )
+    with row1[1]:
+        selected_categories = st.multiselect(
+            "Decision-risk category",
+            [*RISK_LEVELS, "Not assessable"],
+            key="decision_category_filter",
+        )
+    with row1[2]:
+        selected_sources = st.multiselect(
+            "Risk source (Inherent = screening)",
+            ["Residual", "Inherent", "Unavailable"],
+            key="decision_source_filter",
+        )
+    with row2[0]:
+        selected_domains = st.multiselect("Domain", _filter_values(hazards, "domain"), key="acceptance_domain_filter")
+    with row2[1]:
+        selected_owners = st.multiselect(
+            "Owner / responsible person",
+            _filter_values(hazards, "responsible_person"),
+            key="acceptance_owner_filter",
+        )
+    with row2[2]:
+        selected_statuses = st.multiselect(
+            "Hazard/action status",
+            _filter_values(hazards, "status"),
+            key="acceptance_record_status_filter",
+        )
+
+    filtered = hazards.copy()
+    filters = (
+        ("risk_acceptance_status", selected_acceptance),
+        ("decision_risk_category", selected_categories),
+        ("decision_risk_source", selected_sources),
+        ("domain", selected_domains),
+        ("responsible_person", selected_owners),
+        ("status", selected_statuses),
+    )
+    for column, values in filters:
+        if values and column in filtered.columns:
+            filtered = filtered[filtered[column].astype(str).isin(values)]
+    columns = [
+        "hazard_id",
+        "hazard",
+        "domain",
+        "risk_score",
+        "risk_category",
+        "residual_risk_score",
+        "residual_risk_category",
+        "decision_risk_score",
+        "decision_risk_category",
+        "decision_risk_source",
+        "risk_acceptance_status",
+        "acceptance_action_required",
+        "acceptance_reason",
+        "corrective_action_required",
+        "formal_approval_required",
+        "responsible_person",
+        "status",
+    ]
+    st.caption(f"Showing {len(filtered)} of {len(hazards)} analyzed hazards.")
+    st.dataframe(
+        filtered[[column for column in columns if column in filtered]], use_container_width=True, hide_index=True
+    )
+
+
+def _render_validation_center(
+    summaries: list[dict[str, Any]],
+    findings: list[ValidationFinding],
+    datasets: dict[str, pd.DataFrame | None],
+) -> None:
+    """Render auditable validation metrics, filters, inspection, and downloads."""
+    overview = validation_overview(summaries, findings)
+    counts = overview["finding_counts_by_severity"]
+    st.info(VALIDATION_LIMITATION)
+    metric_row1 = st.columns(4)
+    metric_row1[0].metric("Datasets loaded", overview["total_datasets_loaded"])
+    metric_row1[1].metric("Total records", overview["total_records"])
+    metric_row1[2].metric("Errors", counts["Error"])
+    metric_row1[3].metric("Warnings", counts["Warning"])
+    metric_row2 = st.columns(4)
+    metric_row2[0].metric("Information", counts["Information"])
+    metric_row2[1].metric("Analysis-eligible", overview["analysis_eligible_records"])
+    metric_row2[2].metric("Excluded", overview["excluded_records"])
+    metric_row2[3].metric(
+        "Passing / blocked datasets",
+        f'{overview["datasets_passing_validation"]} / {overview["datasets_blocked"]}',
+    )
+
+    summary_data = summaries_frame(summaries)
+    finding_data = findings_frame(findings)
+    st.subheader("Dataset summaries")
+    st.dataframe(summary_data, use_container_width=True, hide_index=True)
+    st.subheader("Validation findings")
+    if finding_data.empty:
+        st.success("No structured findings were generated.")
+        filtered = finding_data
+    else:
+        filter_row1 = st.columns(3)
+        filter_row2 = st.columns(3)
+        with filter_row1[0]:
+            dataset_filter = st.multiselect(
+                "Dataset type",
+                sorted(finding_data["dataset_type"].dropna().astype(str).unique()),
+                key="validation_dataset_filter",
+            )
+        with filter_row1[1]:
+            severity_filter = st.multiselect(
+                "Severity", ["Error", "Warning", "Information"], key="validation_severity_filter"
+            )
+        with filter_row1[2]:
+            code_filter = st.multiselect(
+                "Finding code",
+                sorted(finding_data["code"].dropna().astype(str).unique()),
+                key="validation_code_filter",
+            )
+        with filter_row2[0]:
+            record_filter = st.text_input("Record ID contains", key="validation_record_filter")
+        with filter_row2[1]:
+            column_filter = st.multiselect(
+                "Column",
+                sorted(finding_data["column"].dropna().astype(str).unique()),
+                key="validation_column_filter",
+            )
+        with filter_row2[2]:
+            blocks_filter = st.selectbox("Blocks analysis", ["All", "Yes", "No"], key="validation_blocks_filter")
+        search_text = st.text_input(
+            "Search findings", placeholder="Search message, value, action, code, or ID", key="validation_search"
+        )
+        filtered = finding_data.copy()
+        if dataset_filter:
+            filtered = filtered[filtered["dataset_type"].isin(dataset_filter)]
+        if severity_filter:
+            filtered = filtered[filtered["severity"].isin(severity_filter)]
+        if code_filter:
+            filtered = filtered[filtered["code"].isin(code_filter)]
+        if record_filter:
+            filtered = filtered[
+                filtered["record_id"].astype("string").str.contains(record_filter, case=False, na=False, regex=False)
+            ]
+        if column_filter:
+            filtered = filtered[filtered["column"].isin(column_filter)]
+        if blocks_filter != "All":
+            filtered = filtered[filtered["blocks_analysis"].eq(blocks_filter == "Yes")]
+        if search_text:
+            searchable = filtered[
+                ["code", "message", "record_id", "column", "original_value", "suggested_action"]
+            ].astype("string")
+            filtered = filtered[
+                searchable.apply(
+                    lambda column: column.str.contains(search_text, case=False, na=False, regex=False)
+                ).any(axis=1)
+            ]
+        display_columns = [
+            "finding_id",
+            "dataset_type",
+            "severity",
+            "code",
+            "message",
+            "row_index",
+            "record_id",
+            "column",
+            "original_value",
+            "suggested_action",
+            "blocks_analysis",
+        ]
+        st.caption(f"Showing {len(filtered)} of {len(finding_data)} findings.")
+        st.dataframe(filtered[display_columns], use_container_width=True, hide_index=True)
+
+    st.subheader("Affected record inspection")
+    inspectable = finding_data.loc[finding_data["row_index"].notna()] if not finding_data.empty else finding_data
+    if inspectable.empty:
+        st.caption("No row-specific finding is available for record inspection.")
+    else:
+        selected_finding = st.selectbox(
+            "Select finding",
+            inspectable["finding_id"].tolist(),
+            format_func=lambda finding_id: (
+                f"{finding_id} — " f"{inspectable.loc[inspectable['finding_id'].eq(finding_id), 'message'].iloc[0]}"
+            ),
+            key="validation_record_inspector",
+        )
+        finding_row = inspectable.loc[inspectable["finding_id"].eq(selected_finding)].iloc[0]
+        dataset = datasets.get(str(finding_row["dataset_type"]))
+        row_index = int(finding_row["row_index"])
+        if dataset is not None and row_index in dataset.index:
+            st.dataframe(dataset.loc[[row_index]], use_container_width=True, hide_index=False)
+        else:
+            st.caption("The finding is cross-dataset/file-level or its source row is not available.")
+
+    st.subheader("Validation downloads")
+    download_columns = st.columns(3)
+    download_columns[0].download_button(
+        EXPORT_FILENAMES["validation_findings_csv"],
+        csv_bytes(finding_data),
+        EXPORT_FILENAMES["validation_findings_csv"],
+        "text/csv",
+        key="validation_findings_download",
+    )
+    download_columns[1].download_button(
+        EXPORT_FILENAMES["validation_summary_csv"],
+        csv_bytes(summary_data),
+        EXPORT_FILENAMES["validation_summary_csv"],
+        "text/csv",
+        key="validation_summary_download",
+    )
+    download_columns[2].download_button(
+        EXPORT_FILENAMES["invalid_records_workbook"],
+        invalid_records_workbook_bytes(summaries, findings, datasets),
+        EXPORT_FILENAMES["invalid_records_workbook"],
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        key="validation_invalid_download",
+    )
 
 
 def main() -> None:
-    st.set_page_config(page_title="MOBRA Dashboard", page_icon="🧬", layout="wide")
-    st.markdown("<style>.block-container{padding-top:1.5rem}.stMetric{background:#f8fafc;border:1px solid #e2e8f0;padding:12px;border-radius:10px}</style>", unsafe_allow_html=True)
-    st.title("🧬 MOBRA Dashboard")
-    st.caption("Upload laboratory hazard and ORL data, validate records, calculate risk and readiness, and export a standalone report.")
-    st.info("Prototype scope: external-dataset-based computational verification. Outputs do not establish clinical, operational, or regulatory validation.")
+    st.set_page_config(page_title=APP_TITLE, page_icon="🧬", layout="wide")
+    st.markdown(
+        "<style>.block-container{padding-top:1.5rem}.stMetric{background:#f8fafc;border:1px solid #e2e8f0;padding:12px;border-radius:10px}</style>",
+        unsafe_allow_html=True,
+    )
+    st.title(APP_TITLE)
+    st.caption(
+        "Upload laboratory hazard and ORL data, validate records, calculate risk and readiness, and export a standalone report."
+    )
+    st.info(
+        "This software is an external-dataset-based computational verification prototype and not clinical, operational, regulatory, or field validation."
+    )
+    st.session_state["_mobra_file_findings"] = []
+    st.session_state["_mobra_file_sheets"] = {}
 
-    hazards_raw, requirements_raw, hazard_filename, requirements_filename = _load_inputs()
+    (
+        hazards_raw,
+        requirements_raw,
+        mapping_raw,
+        critical_profile_raw,
+        hazard_filename,
+        requirements_filename,
+        mapping_filename,
+        critical_profile_filename,
+    ) = _load_inputs()
     if hazards_raw is None or requirements_raw is None:
         st.info("Provide both datasets to begin the assessment.")
         return
@@ -143,24 +871,222 @@ def main() -> None:
         hazards_raw = _preview_editor(hazards_raw, "Hazards")
     with col2:
         requirements_raw = _preview_editor(requirements_raw, "Requirements")
+    if mapping_raw is not None:
+        mapping_raw = _preview_editor(mapping_raw, "Requirement–hazard mapping")
+    if critical_profile_raw is not None:
+        critical_profile_raw = _preview_editor(critical_profile_raw, "Critical-control profile")
     hazard_result = validate_hazards(hazards_raw, hazard_overrides)
     requirement_result = validate_requirements(requirements_raw, requirement_overrides)
     _show_validation(hazard_result, "Hazard")
     _show_validation(requirement_result, "Requirement")
-    all_messages = [*hazard_result.errors, *hazard_result.warnings, *requirement_result.errors, *requirement_result.warnings]
-    if hazard_result.errors or requirement_result.errors:
-        st.error("Analysis is paused until validation errors are corrected. Invalid input rows remain visible for download and review.")
+    all_messages = [
+        *hazard_result.errors,
+        *hazard_result.warnings,
+        *requirement_result.errors,
+        *requirement_result.warnings,
+    ]
+    hazard_eligible = int(hazard_result.data.get("inherent_risk_eligible", pd.Series(dtype=bool)).fillna(False).sum())
+    requirement_eligible = int(requirement_result.data.get("bri_eligible", pd.Series(dtype=bool)).fillna(False).sum())
+    if (
+        hazard_result.dataset_blocked
+        or requirement_result.dataset_blocked
+        or not hazard_eligible
+        or not requirement_eligible
+    ):
+        st.error(
+            "Analysis is paused because a required dataset is structurally blocked or has no eligible records. "
+            "Invalid input rows remain visible below and in the validation downloads."
+        )
+        blocked_summaries = [
+            validation_summary(
+                dataset_type="Hazards",
+                filename=hazard_filename,
+                data=hazard_result.data,
+                findings=hazard_result.findings,
+                required_columns=("hazard", "likelihood", "consequence"),
+                missing_columns=hazard_result.missing_columns,
+                duplicate_ids=hazard_result.duplicate_ids,
+                sheet_name=st.session_state["_mobra_file_sheets"].get(hazard_filename, ""),
+                validation_reference_date=hazard_result.validation_reference_date,
+            ),
+            validation_summary(
+                dataset_type="Requirements",
+                filename=requirements_filename,
+                data=requirement_result.data,
+                findings=requirement_result.findings,
+                required_columns=("requirement", "observed_score", "maximum_score"),
+                missing_columns=requirement_result.missing_columns,
+                duplicate_ids=requirement_result.duplicate_ids,
+                sheet_name=st.session_state["_mobra_file_sheets"].get(requirements_filename, ""),
+                validation_reference_date=requirement_result.validation_reference_date,
+            ),
+        ]
+        blocked_findings = [
+            *st.session_state.get("_mobra_file_findings", []),
+            *hazard_result.findings,
+            *requirement_result.findings,
+        ]
+        _render_validation_center(
+            blocked_summaries,
+            blocked_findings,
+            {"Hazards": hazard_result.data, "Requirements": requirement_result.data},
+        )
         return
+    if hazard_result.errors or requirement_result.errors:
+        st.warning(
+            "Some rows are invalid. They remain visible, are excluded from calculations requiring valid fields, "
+            "and prevent an automatic deployment-ready decision."
+        )
 
-    hazards = hazard_result.data
+    acceptance_policy = _risk_acceptance_policy_controls()
+    hazards = apply_risk_acceptance(hazard_result.data, acceptance_policy)
     requirements = requirement_result.data
+    critical_assessment: CriticalControlAssessment | None = None
+    critical_profile_ready = False
+    critical_profile_messages: list[str] = []
+    if critical_profile_raw is not None:
+        critical_assessment = assess_critical_controls(requirements, critical_profile_raw)
+        _show_validation(critical_assessment.validation, "Critical-control profile")
+        critical_profile_ready = critical_assessment.ok
+        critical_profile_messages = [
+            *critical_assessment.validation.errors,
+            *critical_assessment.validation.warnings,
+        ]
+        if not critical_profile_ready:
+            st.warning(
+                "Critical-control governance analysis is paused until profile errors are corrected. "
+                "Hazard analysis and raw BRI remain available."
+            )
+    else:
+        st.info(
+            "No critical-control profile was supplied. Structured governance analysis is unavailable; "
+            "hazard analysis and raw BRI remain available."
+        )
+    mapping_result: MappingValidationResult | None = None
+    mapping = pd.DataFrame(columns=MAPPING_REQUIRED_COLUMNS)
+    mapping_ready = False
+    mapping_messages: list[str] = []
+    if mapping_raw is not None:
+        mapping_result = validate_mapping(mapping_raw, requirements, hazards)
+        _show_validation(mapping_result, "Requirement–hazard mapping")
+        mapping = mapping_result.data
+        mapping_ready = mapping_result.ok
+        mapping_messages = [*mapping_result.errors, *mapping_result.warnings]
+        if not mapping_ready:
+            st.warning(
+                "Mapping analysis is paused until mapping errors are corrected. "
+                "Hazard risk and BRI analysis remain available."
+            )
+    else:
+        st.info("No mapping file was supplied. Hazard risk and BRI analysis remain available without mapping data.")
+
+    profile_validation = critical_assessment.validation if critical_assessment is not None else None
+    cross_result: CrossDatasetValidationResult = validate_cross_dataset_consistency(
+        hazards,
+        requirements,
+        mapping_result.data if mapping_result is not None else None,
+        profile_validation.data if profile_validation is not None else None,
+    )
+    file_findings = list(st.session_state.get("_mobra_file_findings", []))
+    all_findings: list[ValidationFinding] = [
+        *file_findings,
+        *hazard_result.findings,
+        *requirement_result.findings,
+        *(mapping_result.findings if mapping_result is not None else []),
+        *(profile_validation.findings if profile_validation is not None else []),
+        *cross_result.findings,
+    ]
+    all_messages = [finding.message for finding in all_findings if finding.severity in {"Error", "Warning"}]
+    validation_reference_date = hazard_result.validation_reference_date
+    validation_summaries: list[dict[str, Any]] = [
+        validation_summary(
+            dataset_type="Hazards",
+            filename=hazard_filename,
+            data=hazard_result.data,
+            findings=hazard_result.findings,
+            required_columns=("hazard", "likelihood", "consequence"),
+            missing_columns=hazard_result.missing_columns,
+            duplicate_ids=hazard_result.duplicate_ids,
+            sheet_name=st.session_state["_mobra_file_sheets"].get(hazard_filename, ""),
+            validation_reference_date=validation_reference_date,
+        ),
+        validation_summary(
+            dataset_type="Requirements",
+            filename=requirements_filename,
+            data=requirement_result.data,
+            findings=requirement_result.findings,
+            required_columns=("requirement", "observed_score", "maximum_score"),
+            missing_columns=requirement_result.missing_columns,
+            duplicate_ids=requirement_result.duplicate_ids,
+            sheet_name=st.session_state["_mobra_file_sheets"].get(requirements_filename, ""),
+            validation_reference_date=validation_reference_date,
+        ),
+    ]
+    if mapping_result is not None:
+        validation_summaries.append(
+            validation_summary(
+                dataset_type="Mapping",
+                filename=mapping_filename,
+                data=mapping_result.data,
+                findings=mapping_result.findings,
+                required_columns=MAPPING_REQUIRED_COLUMNS,
+                missing_columns=mapping_result.missing_columns,
+                duplicate_ids=mapping_result.duplicate_ids,
+                sheet_name=st.session_state["_mobra_file_sheets"].get(mapping_filename, ""),
+                validation_reference_date=validation_reference_date,
+            )
+        )
+    if profile_validation is not None:
+        validation_summaries.append(
+            validation_summary(
+                dataset_type="Critical-Control Profile",
+                filename=critical_profile_filename,
+                data=profile_validation.data,
+                findings=profile_validation.findings,
+                required_columns=tuple(
+                    profile_validation.data.columns.intersection(
+                        [
+                            "requirement_id",
+                            "criticality_level",
+                            "failure_disposition",
+                            "minimum_acceptable_score",
+                            "evidence_required",
+                            "incomplete_record_disposition",
+                            "rationale",
+                            "approval_status",
+                            "source_status",
+                        ]
+                    )
+                ),
+                missing_columns=profile_validation.missing_columns,
+                duplicate_ids=profile_validation.duplicate_ids,
+                sheet_name=st.session_state["_mobra_file_sheets"].get(critical_profile_filename, ""),
+                validation_reference_date=validation_reference_date,
+            )
+        )
+    validation_datasets: dict[str, pd.DataFrame | None] = {
+        "Hazards": hazards,
+        "Requirements": requirements,
+        "Mapping": mapping_result.data if mapping_result is not None else None,
+        "Critical-Control Profile": profile_validation.data if profile_validation is not None else None,
+    }
     with st.sidebar:
         st.divider()
-        selected_levels = st.multiselect("Risk categories shown in charts", RISK_LEVELS, default=RISK_LEVELS)
+        selected_levels = st.multiselect("Inherent risk categories shown in charts", RISK_LEVELS, default=RISK_LEVELS)
     filtered_hazards = hazards[hazards["risk_category"].isin(selected_levels)].copy()
     bri = calculate_bri(requirements)
     domains = domain_readiness(requirements)
-    decision, reasons = deployment_decision(hazards, requirements, bri)
+    decision, reasons = deployment_decision(
+        hazards,
+        requirements,
+        bri,
+        validation_errors=[
+            finding.message for finding in all_findings if finding.severity == "Error" and finding.blocks_analysis
+        ],
+        risk_acceptance_policy=acceptance_policy,
+        critical_control_assessment=critical_assessment,
+    )
+    acceptance_summary_data = risk_acceptance_summary(hazards, acceptance_policy)
     quality = data_quality_summary(hazards, requirements)
     assert_heatmap_total(filtered_hazards)
 
@@ -168,8 +1094,15 @@ def main() -> None:
     k1, k2, k3, k4 = st.columns(4)
     k1.metric("Overall BRI", "N/A" if pd.isna(bri) else f"{bri:.1f}%")
     k2.metric("Filtered hazards", len(filtered_hazards), f"of {len(hazards)} total")
-    k3.metric("High + Extreme (filtered)", int(filtered_hazards["risk_category"].isin(["High", "Extreme"]).sum()))
-    k4.metric("Failed critical controls", len(failed_critical_controls(requirements)))
+    k3.metric(
+        "High + Extreme inherent (filtered)", int(filtered_hazards["risk_category"].isin(["High", "Extreme"]).sum())
+    )
+    blocking_failure_count = (
+        critical_assessment.summary["deployment_blocking_failure_count"]
+        if critical_profile_ready and critical_assessment is not None
+        else len(failed_critical_controls(requirements))
+    )
+    k4.metric("Deployment-blocking failures", blocking_failure_count)
     if decision == "READY FOR DEPLOYMENT":
         st.success(f"Decision: {decision}")
     elif decision == "CONDITIONAL DEPLOYMENT":
@@ -178,7 +1111,17 @@ def main() -> None:
         st.error(f"Decision: {decision}")
     st.write(" ".join(reasons))
 
-    tab1, tab2, tab3, tab4 = st.tabs(["Executive dashboard", "Hazard analysis", "Readiness analysis", "Data & exports"])
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs(
+        [
+            "Executive dashboard",
+            "Hazard analysis",
+            "Readiness analysis",
+            "Critical-Control Governance",
+            "Requirement–Hazard Mapping",
+            "Data Validation Center",
+            "Data & exports",
+        ]
+    )
     with tab1:
         left, right = st.columns(2)
         left.plotly_chart(bri_gauge(bri), use_container_width=True, key="executive_bri")
@@ -186,22 +1129,84 @@ def main() -> None:
         st.plotly_chart(domain_figure(domains), use_container_width=True, key="executive_domains")
     with tab2:
         st.plotly_chart(heatmap_figure(filtered_hazards), use_container_width=True, key="hazard_heatmap")
-        st.caption(f"Heat-map cell counts verified: {heatmap_total(filtered_hazards)} cells represent {len(filtered_hazards)} filtered valid hazards.")
-        st.dataframe(filtered_hazards.sort_values("risk_score", ascending=False), use_container_width=True, hide_index=True)
-        st.subheader("Top risks")
+        st.caption(
+            f"Inherent-risk heat-map cell counts verified: {heatmap_total(filtered_hazards)} cells represent "
+            f"{len(filtered_hazards)} filtered valid hazards. Cell numbers are hazard frequencies."
+        )
+        st.dataframe(
+            filtered_hazards.sort_values("risk_score", ascending=False), use_container_width=True, hide_index=True
+        )
+        st.subheader("Top inherent risks")
         st.dataframe(filtered_hazards.nlargest(10, "risk_score"), use_container_width=True, hide_index=True)
+        _render_risk_acceptance(hazards, acceptance_policy)
     with tab3:
         st.plotly_chart(domain_figure(domains), use_container_width=True, key="readiness_domains")
         st.dataframe(domains, use_container_width=True, hide_index=True)
-        st.subheader("Mission-critical controls")
-        st.dataframe(requirements[requirements["critical_control"]], use_container_width=True, hide_index=True)
-        st.subheader("Failed critical controls")
-        st.dataframe(failed_critical_controls(requirements), use_container_width=True, hide_index=True)
+        st.subheader("Legacy input critical-control flags")
+        st.caption(
+            "These source flags are preserved for traceability; governance outcomes come from the separate profile."
+        )
+        critical_flags = requirements["critical_control"].fillna(False).astype(bool)
+        st.dataframe(requirements.loc[critical_flags], use_container_width=True, hide_index=True)
     with tab4:
+        if critical_profile_ready and critical_assessment is not None:
+            _render_critical_control_governance(critical_assessment)
+        elif critical_assessment is not None:
+            st.warning("Critical-control governance is unavailable because the profile has validation errors.")
+        else:
+            st.info("Upload a critical-control profile to enable structured governance analysis.")
+    with tab5:
+        if mapping_ready:
+            _render_mapping_analysis(mapping, requirements, hazards)
+        elif mapping_result is not None:
+            st.warning("Mapping analysis is unavailable because the mapping dataset has validation errors.")
+        else:
+            st.info("Upload a separate mapping CSV/XLSX/XLS file to enable mapping analysis.")
+    with tab6:
+        _render_validation_center(validation_summaries, all_findings, validation_datasets)
+    with tab7:
         st.subheader("Validated data and quality")
         st.json(quality)
         st.dataframe(hazards, use_container_width=True, hide_index=True)
         st.dataframe(requirements, use_container_width=True, hide_index=True)
+        if profile_validation is not None:
+            st.dataframe(profile_validation.data, use_container_width=True, hide_index=True)
+            if critical_profile_ready and critical_assessment is not None:
+                st.dataframe(critical_assessment.data, use_container_width=True, hide_index=True)
+        if mapping_result is not None:
+            st.dataframe(mapping_result.data, use_container_width=True, hide_index=True)
+        mapping_statistics: dict[str, Any] = {
+            "available": mapping_ready,
+            "mapping_file": mapping_filename,
+            "validation_messages": mapping_messages,
+        }
+        coverage_export: pd.DataFrame | None = None
+        if mapping_ready:
+            mapping_statistics.update(mapping_coverage_summary(mapping, requirements, hazards))
+            coverage_export = mapping_coverage_table(mapping, requirements, hazards)
+        critical_summary_data: dict[str, Any]
+        if critical_assessment is not None:
+            critical_summary_data = critical_assessment.summary
+        else:
+            critical_summary_data = {
+                "critical_control_profile_status": "Unavailable",
+                "criticality_level_counts": {level: 0 for level in CRITICALITY_LEVELS},
+                "critical_control_outcome_counts": {outcome: 0 for outcome in CONTROL_OUTCOMES},
+                "deployment_blocking_failure_count": 0,
+                "conditional_gap_count": 0,
+                "important_gap_count": 0,
+                "evidence_deficiency_count": 0,
+                "incomplete_critical_record_count": 0,
+                "manual_review_count": 0,
+                "formal_approval_required_count": 0,
+                "compensating_control_required_count": 0,
+                "blocking_requirement_ids": [],
+                "conditional_requirement_ids": [],
+                "important_gap_requirement_ids": [],
+                "evidence_deficient_requirement_ids": [],
+                "manual_review_requirement_ids": [],
+                "critical_control_limitations": CRITICAL_CONTROL_LIMITATION,
+            }
         summary = {
             "generated_at": pd.Timestamp.now().isoformat(timespec="seconds"),
             "hazard_file": hazard_filename,
@@ -211,20 +1216,161 @@ def main() -> None:
             "decision_reasons": reasons,
             "hazard_count_total": len(hazards),
             "hazard_count_filtered": len(filtered_hazards),
-            "risk_counts_filtered": filtered_hazards["risk_category"].value_counts().reindex(RISK_LEVELS, fill_value=0).astype(int).to_dict(),
+            "risk_counts_filtered": filtered_hazards["risk_category"]
+            .value_counts()
+            .reindex(RISK_LEVELS, fill_value=0)
+            .astype(int)
+            .to_dict(),
             "heatmap_cell_total": heatmap_total(filtered_hazards),
-            "failed_critical_controls": len(failed_critical_controls(requirements)),
+            "failed_critical_controls": blocking_failure_count,
             "data_quality": quality,
             "validation_messages": all_messages,
+            "requirement_hazard_mapping": mapping_statistics,
+            **acceptance_summary_data,
+            "critical_control_profile_status": critical_summary_data["critical_control_profile_status"],
+            "criticality_level_counts": critical_summary_data["criticality_level_counts"],
+            "critical_control_outcome_counts": critical_summary_data["critical_control_outcome_counts"],
+            "deployment_blocking_failure_count": critical_summary_data["deployment_blocking_failure_count"],
+            "conditional_gap_count": critical_summary_data["conditional_gap_count"],
+            "evidence_deficiency_count": critical_summary_data["evidence_deficiency_count"],
+            "incomplete_critical_record_count": critical_summary_data["incomplete_critical_record_count"],
+            "manual_review_count": critical_summary_data["manual_review_count"],
+            "critical_control_formal_approval_required_count": critical_summary_data["formal_approval_required_count"],
+            "compensating_control_required_count": critical_summary_data["compensating_control_required_count"],
+            "blocking_requirement_ids": critical_summary_data["blocking_requirement_ids"],
+            "conditional_requirement_ids": critical_summary_data["conditional_requirement_ids"],
+            "critical_control_limitations": critical_summary_data["critical_control_limitations"],
+            "critical_control_governance": critical_summary_data,
+            "critical_control_profile_file": critical_profile_filename,
+            "critical_control_profile_validation_messages": critical_profile_messages,
+            **validation_json_fields(
+                validation_summaries,
+                all_findings,
+                validation_reference_date=validation_reference_date,
+            ),
         }
-        html = make_html_report(hazards, requirements, bri, decision, reasons, hazard_filename=hazard_filename, requirements_filename=requirements_filename, validation_messages=all_messages, filtered_hazards=filtered_hazards)
-        st.download_button("Download standalone HTML report", html.encode("utf-8"), "MOBRA_Report.html", "text/html")
-        st.download_button("Download analyzed hazards (CSV)", csv_bytes(hazards), "MOBRA_Analyzed_Hazards.csv", "text/csv")
-        st.download_button("Download analyzed requirements (CSV)", csv_bytes(requirements), "MOBRA_Analyzed_Requirements.csv", "text/csv")
-        st.download_button("Download summary (JSON)", json.dumps(summary, indent=2, ensure_ascii=False).encode("utf-8"), "MOBRA_Summary.json", "application/json")
-        st.download_button("Download analyzed workbook (XLSX)", excel_bytes(hazards, requirements, summary), "MOBRA_Analyzed_Data.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-        st.download_button("Download hazard template (CSV)", (BASE_DIR / "sample_data" / "hazards_template.csv").read_bytes(), "MOBRA_Hazards_Template.csv", "text/csv")
-        st.download_button("Download requirements template (CSV)", (BASE_DIR / "sample_data" / "requirements_template.csv").read_bytes(), "MOBRA_Requirements_Template.csv", "text/csv")
+        html = make_html_report(
+            hazards,
+            requirements,
+            bri,
+            decision,
+            reasons,
+            hazard_filename=hazard_filename,
+            requirements_filename=requirements_filename,
+            validation_messages=all_messages,
+            filtered_hazards=filtered_hazards,
+            mapping=mapping if mapping_ready else None,
+            mapping_validation_messages=mapping_messages,
+            risk_acceptance_policy=acceptance_policy,
+            critical_profile=(
+                profile_validation.data if critical_profile_ready and profile_validation is not None else None
+            ),
+            critical_control_assessment=critical_assessment if critical_profile_ready else None,
+            critical_profile_validation_messages=critical_profile_messages,
+            validation_findings=all_findings,
+            validation_summaries=validation_summaries,
+            validation_reference_date=validation_reference_date,
+        )
+        st.download_button(
+            "Download standalone HTML report", html.encode("utf-8"), EXPORT_FILENAMES["report"], "text/html"
+        )
+        st.download_button(
+            "Download analyzed hazards (CSV)", csv_bytes(hazards), EXPORT_FILENAMES["hazards_csv"], "text/csv"
+        )
+        st.download_button(
+            "Download analyzed requirements (CSV)",
+            csv_bytes(requirements),
+            EXPORT_FILENAMES["requirements_csv"],
+            "text/csv",
+        )
+        if mapping_ready:
+            st.download_button(
+                "Download requirement–hazard mapping (CSV)",
+                csv_bytes(mapping),
+                EXPORT_FILENAMES["mapping_csv"],
+                "text/csv",
+            )
+        if critical_profile_ready and critical_assessment is not None and critical_profile_raw is not None:
+            st.download_button(
+                "Download critical-control profile (CSV)",
+                csv_bytes(profile_validation.data),
+                EXPORT_FILENAMES["critical_profile_csv"],
+                "text/csv",
+            )
+            st.download_button(
+                "Download critical-control assessment (CSV)",
+                csv_bytes(critical_assessment.data),
+                EXPORT_FILENAMES["critical_assessment_csv"],
+                "text/csv",
+            )
+            st.download_button(
+                "Download critical-control summary (CSV)",
+                csv_bytes(critical_control_summary_table(critical_assessment)),
+                EXPORT_FILENAMES["critical_summary_csv"],
+                "text/csv",
+            )
+        if mapping_ready and coverage_export is not None:
+            st.download_button(
+                "Download mapping coverage (CSV)",
+                csv_bytes(coverage_export),
+                EXPORT_FILENAMES["mapping_coverage_csv"],
+                "text/csv",
+            )
+        st.download_button(
+            "Download summary (JSON)",
+            json.dumps(summary, indent=2, ensure_ascii=False).encode("utf-8"),
+            EXPORT_FILENAMES["summary_json"],
+            "application/json",
+        )
+        st.download_button(
+            "Download validation findings (CSV)",
+            csv_bytes(findings_frame(all_findings)),
+            EXPORT_FILENAMES["validation_findings_csv"],
+            "text/csv",
+        )
+        st.download_button(
+            "Download validation summary (CSV)",
+            csv_bytes(summaries_frame(validation_summaries)),
+            EXPORT_FILENAMES["validation_summary_csv"],
+            "text/csv",
+        )
+        st.download_button(
+            "Download invalid records workbook (XLSX)",
+            invalid_records_workbook_bytes(validation_summaries, all_findings, validation_datasets),
+            EXPORT_FILENAMES["invalid_records_workbook"],
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+        st.download_button(
+            "Download analyzed workbook (XLSX)",
+            excel_bytes(
+                hazards,
+                requirements,
+                summary,
+                mapping if mapping_ready else None,
+                risk_acceptance_policy=acceptance_policy,
+                critical_profile=(
+                    profile_validation.data if critical_profile_ready and profile_validation is not None else None
+                ),
+                critical_control_assessment=critical_assessment if critical_profile_ready else None,
+                validation_summaries=validation_summaries,
+                validation_findings=all_findings,
+                validation_datasets=validation_datasets,
+            ),
+            EXPORT_FILENAMES["workbook"],
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+        st.download_button(
+            "Download hazard template (CSV)",
+            (BASE_DIR / "sample_data" / "hazards_template.csv").read_bytes(),
+            "MOBRA_Hazards_Template.csv",
+            "text/csv",
+        )
+        st.download_button(
+            "Download requirements template (CSV)",
+            (BASE_DIR / "sample_data" / "requirements_template.csv").read_bytes(),
+            "MOBRA_Requirements_Template.csv",
+            "text/csv",
+        )
 
 
 if __name__ == "__main__":

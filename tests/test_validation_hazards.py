@@ -1,0 +1,28 @@
+"""Granular hazard input-validation tests."""
+
+import pytest
+
+from .cases_logic import test_blank_ids_are_reported as test_blank_ids_are_reported
+from .cases_logic import test_duplicate_ids_are_reported as test_duplicate_ids_are_reported
+from .cases_logic import test_missing_required_columns_are_reported as test_missing_required_columns_are_reported
+from .cases_structured_validation import (
+    test_empty_hazard_dataset_is_a_blocking_structured_error as test_empty_hazard_dataset_is_a_blocking_structured_error,
+)
+from .cases_structured_validation import (
+    test_generated_hazard_ids_are_raw_traceable_and_warned as test_generated_hazard_ids_are_raw_traceable_and_warned,
+)
+from .cases_structured_validation import (
+    test_hazard_duplicate_id_is_structured_and_both_rows_remain_visible as test_hazard_duplicate_id_is_structured_and_both_rows_remain_visible,
+)
+from .cases_structured_validation import test_hazard_granular_validation_codes as test_hazard_granular_validation_codes
+from .cases_structured_validation import (
+    test_invalid_hazard_is_excluded_from_heatmap_without_disappearing as test_invalid_hazard_is_excluded_from_heatmap_without_disappearing,
+)
+from .cases_structured_validation import (
+    test_partial_and_invalid_residual_pairs_have_specific_codes as test_partial_and_invalid_residual_pairs_have_specific_codes,
+)
+from .cases_structured_validation import (
+    test_uploaded_hazard_risk_mismatches_are_preserved_separately as test_uploaded_hazard_risk_mismatches_are_preserved_separately,
+)
+
+pytestmark = pytest.mark.unit
