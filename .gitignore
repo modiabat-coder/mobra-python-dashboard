@@ -8,3 +8,4 @@ htmlcov/
 .ruff_cache/
 *.pyc
 .DS_Store
+.streamlit/secrets.toml

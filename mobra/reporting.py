@@ -18,6 +18,20 @@ from .acceptance import (
     risk_acceptance_summary_table,
 )
 from .charts import bri_gauge, domain_figure, heatmap_figure, risk_counts_figure
+from .config import (
+    APP_TITLE,
+    APP_VERSION,
+    AUTHOR_NAME,
+    FULL_DISCLAIMER,
+    HOW_TO_USE_STEPS,
+    INTRODUCTION_COMPONENTS,
+    NON_ENDORSEMENT_STATEMENT,
+    NORMATIVE_EVIDENCE_WORDING,
+    PROTOTYPE_STATUS,
+    WHAT_MOBRA_DOES_NOT_DO,
+    build_identifier,
+    configured_author_email,
+)
 from .critical_controls import (
     CRITICAL_CONTROL_LIMITATION,
     CriticalControlAssessment,
@@ -61,6 +75,10 @@ def make_html_report(
     validation_findings: list[ValidationFinding] | None = None,
     validation_summaries: list[dict[str, Any]] | None = None,
     validation_reference_date: str | None = None,
+    author_email: str | None = None,
+    assessment_metadata: dict[str, Any] | None = None,
+    manuscript_available: bool | None = None,
+    email_backup_enabled: bool | None = None,
 ) -> str:
     """Build a self-contained HTML report with escaped data tables and inline Plotly."""
     acceptance_policy = risk_acceptance_policy or RiskAcceptancePolicy()
@@ -150,7 +168,10 @@ def make_html_report(
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>MOBRA — Mobile Operational Biosecurity Readiness Assessment Report</title><style>
 body{font-family:Arial,sans-serif;margin:0;background:#f5f7fa;color:#17202a}header{background:#0b3954;color:#fff;padding:28px 5%}main{max-width:1250px;margin:auto;padding:24px}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px}.card{background:#fff;border-radius:12px;padding:18px;box-shadow:0 2px 10px #0001;margin-bottom:18px}.metric{font-size:30px;font-weight:700}.label{color:#5d6d7e}.decision{font-size:22px;font-weight:700}table{border-collapse:collapse;width:100%;font-size:12px;display:block;overflow-x:auto}th,td{border:1px solid #ddd;padding:6px;text-align:left;white-space:nowrap}th{background:#eaf2f8}.plot{overflow-x:auto}.note{color:#5d6d7e;font-size:13px}</style></head>
-<body><header><h1>MOBRA — Mobile Operational Biosecurity Readiness Assessment Report</h1><p>Computational verification prototype</p></header><main>
+<body><header><h1>MOBRA — Mobile Operational Biosecurity Readiness Assessment Report</h1><p>{{ prototype_status }}</p><p>{{ application_definition }}</p></header><main>
+<div class="card"><h2>Application metadata</h2><p><strong>Application:</strong> {{ application_name }}<br><strong>Version:</strong> {{ application_version }}<br><strong>Author:</strong> {{ author_name }}<br><strong>Build:</strong> {{ build_identifier }}<br><strong>Validation reference date:</strong> {{ validation_reference_date }}</p>{% if assessment_metadata %}<h3>Assessment metadata</h3><ul>{% for key, value in assessment_metadata.items() %}<li><strong>{{ key }}:</strong> {{ value }}</li>{% endfor %}</ul>{% endif %}{% if author_email %}<p><strong>Contact:</strong> <a href="mailto:{{ author_email }}?subject=MOBRA%20Application%20Inquiry">{{ author_email }}</a></p>{% endif %}</div>
+<div class="card"><h2>About MOBRA</h2><p>{{ application_definition }}</p><p>{{ normative_evidence_wording }}</p><p class="note">{{ non_endorsement_statement }}</p></div>
+<div class="card"><h2>How to use this application</h2><ol>{% for step in how_to_use_steps %}<li>{{ step }}</li>{% endfor %}</ol><h2>What MOBRA does not do</h2><ul>{% for item in what_mobra_does_not_do %}<li>Replace {{ item|lower }}</li>{% endfor %}</ul><p><strong>Components:</strong> {{ introduction_components }}</p></div>
 <div class="grid"><div class="card"><div class="label">Overall BRI</div><div class="metric">{{ bri_display }}%</div></div><div class="card"><div class="label">Hazards analyzed</div><div class="metric">{{ hazard_count }}</div></div><div class="card"><div class="label">Unacceptable hazards</div><div class="metric">{{ unacceptable_count }}</div></div><div class="card"><div class="label">Decision</div><div class="decision">{{ decision }}</div></div></div>
 <div class="card"><h2>Analysis metadata</h2><p>Generated: {{ generated }}<br>Hazard file: {{ hazard_filename }} ({{ hazard_rows }} rows × {{ hazard_columns }} columns)<br>Requirements file: {{ requirements_filename }} ({{ requirement_rows }} rows × {{ requirement_columns }} columns)</p></div>
 <div class="card"><h2>Decision rationale</h2><ul>{% for reason in reasons %}<li>{{ reason }}</li>{% endfor %}</ul></div>
@@ -172,10 +193,29 @@ body{font-family:Arial,sans-serif;margin:0;background:#f5f7fa;color:#17202a}head
 <div class="card"><h2>Appendix: Representative Requirement-to-Hazard Mapping</h2>{{ mapping_table }}</div>{% endif %}
 <div class="card"><h2>Hazard register (calculated fields included)</h2>{{ hazards_table }}</div><div class="card"><h2>Operational requirements (calculated fields included)</h2>{{ requirements_table }}</div>
 <div class="card"><h2>Methodology and limitations</h2><p>Risk Score = Likelihood x Consequence. Categories remain Low 1-4, Moderate 5-9, High 10-16, and Extreme 17-25. Inherent risk is calculated from the original likelihood and consequence. Residual risk is used only when valid residual data or a valid calculated residual category is available for that hazard. Under the default missing-residual policy, inherent risk is a screening substitute and is explicitly labeled as such. BRI (%) remains sum of observed requirement scores divided by sum of maximum requirement scores x 100. Critical-control governance is a separate override layer and does not remove low-scoring controls from BRI. Score status, required evidence, and record completeness are assessed independently. Deployment-blocking failures override a high BRI; Conditional gaps and Manual review prevent automatic READY. A READY result does not imply that missing residual assessments were completed. Critical-control classifications and thresholds are provisional rather than universal, regulatory, or institutionally approved. This is external-dataset-based computational verification of the MOBRA prototype, not clinical, operational, regulatory, or field validation. The application does not replace risk acceptance by authorized and accountable institutional personnel.</p></div>
-<p class="note">Generated with UTF-8. Source data are not overwritten; calculated columns are added to the downloaded analysis copies.</p></main></body></html>"""
+<div class="card"><h2>Disclaimer and Limitation of Liability</h2><p>{{ full_disclaimer }}</p><p class="note">{{ non_endorsement_statement }}</p></div>
+<p class="note">Generated with UTF-8. Source data are not overwritten; calculated columns are added to the downloaded analysis copies. Manuscript available: {{ manuscript_available }}. Optional email backup enabled: {{ email_backup_enabled }}.</p></main></body></html>"""
     )
     domain_plot = domain_figure(domains) if not domains.empty else go.Figure()
     return template.render(
+        application_name=escape(APP_TITLE),
+        application_version=escape(APP_VERSION),
+        author_name=escape(AUTHOR_NAME),
+        author_email=escape(author_email if author_email is not None else configured_author_email()),
+        application_definition=escape(
+            "MOBRA is a prototype decision-support application for structured operational biosecurity readiness assessment in mobile biological laboratories."
+        ),
+        prototype_status=escape(PROTOTYPE_STATUS),
+        build_identifier=escape(build_identifier()),
+        introduction_components=escape("; ".join(INTRODUCTION_COMPONENTS)),
+        how_to_use_steps=[escape(step) for step in HOW_TO_USE_STEPS],
+        what_mobra_does_not_do=[escape(item) for item in WHAT_MOBRA_DOES_NOT_DO],
+        normative_evidence_wording=escape(NORMATIVE_EVIDENCE_WORDING),
+        non_endorsement_statement=escape(NON_ENDORSEMENT_STATEMENT),
+        full_disclaimer=escape(FULL_DISCLAIMER),
+        assessment_metadata={str(key): escape(str(value)) for key, value in (assessment_metadata or {}).items()},
+        manuscript_available=bool(manuscript_available),
+        email_backup_enabled=bool(email_backup_enabled),
         bri_display="N/A" if pd.isna(bri) else f"{bri:.1f}",
         hazard_count=len(filtered),
         unacceptable_count=acceptance["unacceptable_hazard_count"],
