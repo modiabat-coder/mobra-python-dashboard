@@ -352,6 +352,73 @@ def bri_gauge(bri: float) -> go.Figure:
     return bri_progress_figure(bri)
 
 
+def executive_radial_gauge(
+    value: float,
+    title: str,
+    *,
+    higher_is_better: bool = True,
+) -> go.Figure:
+    """Render one contextual 0–100 executive indicator.
+
+    These bands are presentation cues only. They do not replace the MOBRA
+    deployment rules, Critical Control override, or fixed risk matrix.
+    """
+    numeric = 0.0 if pd.isna(value) else float(np.clip(value, 0, 100))
+    if higher_is_better:
+        steps = [
+            {"range": [0, 50], "color": "#F9DEDC"},
+            {"range": [50, 70], "color": "#FCE8D4"},
+            {"range": [70, 85], "color": "#FFF4C2"},
+            {"range": [85, 100], "color": "#DDF1E4"},
+        ]
+    else:
+        steps = [
+            {"range": [0, 25], "color": "#DDF1E4"},
+            {"range": [25, 50], "color": "#FFF4C2"},
+            {"range": [50, 75], "color": "#FCE8D4"},
+            {"range": [75, 100], "color": "#F9DEDC"},
+        ]
+    figure = go.Figure(
+        go.Indicator(
+            mode="gauge+number",
+            value=numeric,
+            number={
+                "suffix": "%",
+                "valueformat": ".1f",
+                "font": {"size": 30, "color": PRIMARY_COLOR},
+            },
+            title={
+                "text": title,
+                "font": {"size": 15, "color": MUTED_TEXT_COLOR},
+            },
+            gauge={
+                "shape": "angular",
+                "axis": {
+                    "range": [0, 100],
+                    "tickvals": [0, 25, 50, 75, 100],
+                    "tickfont": {"size": 10, "color": MUTED_TEXT_COLOR},
+                },
+                "bar": {"color": SECONDARY_COLOR, "thickness": 0.28},
+                "bgcolor": "#E8EFF1",
+                "borderwidth": 0,
+                "steps": steps,
+                "threshold": {
+                    "line": {"color": PRIMARY_COLOR, "width": 3},
+                    "thickness": 0.8,
+                    "value": numeric,
+                },
+            },
+        )
+    )
+    figure.update_layout(
+        height=255,
+        margin={"l": 22, "r": 22, "t": 55, "b": 16},
+        paper_bgcolor=SURFACE_COLOR,
+        font={"family": "Inter, Segoe UI, Arial", "color": TEXT_COLOR},
+    )
+    return figure
+
+
 def domain_figure(domains: pd.DataFrame) -> go.Figure:
     """Show weighted readiness for each available operational domain."""
     data = domains.sort_values("readiness_pct", ascending=True)

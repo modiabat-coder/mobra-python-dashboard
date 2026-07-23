@@ -12,6 +12,13 @@ and normative resource catalogues. These functions are integrated into the
 existing twelve-view interface and remain supplementary to the canonical
 scientific decision path.
 
+The controlled enhancement round dated 2026-07-24 preserved those twelve views
+and added only two new navigation targets: a synthetic Mission Map and a
+Research & Manuscript view. It also added optional secrets-backed
+authentication, contextual Home gauges, and a more balanced brand hero. None
+of these additions writes to or replaces the canonical risk, readiness, or
+deployment-decision modules.
+
 ## Files reviewed
 
 - Application entry point and Streamlit configuration.
@@ -45,8 +52,11 @@ scientific decision path.
 
 - Reduced `app.py` to configuration, context construction, sidebar rendering, and page dispatch.
 - Added reusable UI components, layout, state, and page renderers.
-- Added twelve clearly ordered views covering the complete assessment workflow.
+- Preserved the twelve clearly ordered assessment views and added two
+  supplementary views for mission workflow and research transparency.
 - Preserved active dataset and page state across reruns.
+- Added PBKDF2-based optional sign-in, session timeout, and logout with no
+  repository credential or plaintext password.
 
 ### Data import and validation
 
@@ -95,15 +105,21 @@ Results:
 
 - Python compilation: passed.
 - Import validation: passed.
-- Automated tests: 56 passed.
+- Automated tests: 62 passed.
 - Every navigation page: passed Streamlit application harness.
 - Report generation: passed.
 - Local Streamlit startup and HTTP render: passed.
 - Live browser checks at 1440 × 900, 1280 × 720, 1024 × 768, 820 px, and 768 px: passed.
 - KPI grids resolved to 4, 4, 2, 2, and 1 columns at those widths with no page or card overflow.
-- All twelve application pages were traversed in the live browser with no retired decision label or placeholder grammar.
+- All fourteen application pages were traversed in the live browser with no retired decision label or placeholder grammar.
 - Standalone report checks at desktop, 820 px, and 560 px: passed with 4/2/1 KPI layouts and no document overflow.
 - Browser console: zero application or report errors after the final render.
+- Controlled-enhancement browser recheck: all fourteen navigation targets
+  opened without a Streamlit exception; Home, Mission Map, Research &
+  Manuscript, and Methodology received focused content checks.
+- Controlled-enhancement responsive recheck: 1280×720, 768×900, 560×900, and
+  390×844 with zero horizontal overflow and zero browser console warnings or
+  errors.
 - Heatmap: 24 valid hazards represented by 24 total matrix counts.
 - Demonstration decision: 86.7% BRI with 11 failed Critical Controls correctly displayed as DO NOT DEPLOY.
 

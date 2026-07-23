@@ -20,10 +20,10 @@ PAGE_GROUPS = {
     "Overview": ["Home"],
     "Data": ["Data Import", "Data Validation"],
     "Assessment": ["Requirements Assessment", "Hazard Register"],
-    "Analysis": ["Risk Analysis", "Readiness Dashboard"],
+    "Analysis": ["Risk Analysis", "Readiness Dashboard", "Mission Map"],
     "Decision": ["Deployment Decision", "Corrective Actions"],
     "Reporting": ["Reports and Export"],
-    "System Information": ["Methodology", "About MOBRA"],
+    "System Information": ["Methodology", "Research and References", "About MOBRA"],
 }
 PAGE_ICONS = {
     "Home": "\u2302",
@@ -33,10 +33,12 @@ PAGE_ICONS = {
     "Hazard Register": "\u26a0",
     "Risk Analysis": "\u25a6",
     "Readiness Dashboard": "\u25d4",
+    "Mission Map": "\u2316",
     "Deployment Decision": "\u25c6",
     "Corrective Actions": "\u21bb",
     "Reports and Export": "\u21e9",
     "Methodology": "\u2211",
+    "Research and References": "\u25a1",
     "About MOBRA": "\u24d8",
 }
 PAGE_LABELS = {
@@ -47,10 +49,12 @@ PAGE_LABELS = {
     "Hazard Register": "Hazard Register",
     "Risk Analysis": "Risk Matrix & Heatmap",
     "Readiness Dashboard": "Readiness Analysis",
+    "Mission Map": "Mission Map",
     "Deployment Decision": "Deployment Decision",
     "Corrective Actions": "Corrective Actions",
     "Reports and Export": "Reports and Export",
     "Methodology": "Methodology",
+    "Research and References": "Research & Manuscript",
     "About MOBRA": "About MOBRA",
 }
 PAGE_ORDER = [page for pages in PAGE_GROUPS.values() for page in pages]

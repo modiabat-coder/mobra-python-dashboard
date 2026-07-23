@@ -6,6 +6,11 @@ MOBRA is a Streamlit decision-support application for assessing the operational 
 
 MOBRA supports technical verification, prototype testing, and external-data compatibility assessment. It is not clinical, regulatory, field, or final scientific validation of the MOBRA methodology.
 
+The current interface also provides optional secrets-backed sign-in, contextual
+executive gauges, a clearly synthetic interactive mission workflow, and a
+dedicated Research and References view. These additions do not change any
+scientific formula, threshold, or deployment rule.
+
 ![MOBRA executive dashboard](assets/screenshots/home_dashboard.png)
 
 The reconciliation of the visually refined interface with the preserved
@@ -62,13 +67,47 @@ The original source file is never overwritten.
   comparison, domain concentration, top hazards, verified 5 × 5 matrix, and
   supplementary risk-acceptance review.
 - **Readiness Dashboard** — compact Overall BRI, weighted domain readiness, and least-ready-domain priorities.
+- **Mission Map** — synthetic, interactive deployment-gate workflow with
+  tooltips, progress, and status legend; no real operational coordinates are
+  represented.
 - **Deployment Decision** — primary reasons, blockers, required actions, owners, dates, and reassessment conditions.
 - **Corrective Actions** — priority, owner, target date, status, overdue flag, and completion evidence.
 - **Reports and Export** — branded HTML report, structured Excel workbook,
   JSON/CSV outputs, advanced analysis exports, field workbooks, printable PDFs,
   import templates, and normative resource catalogues.
 - **Methodology** — fixed formulas, thresholds, terms, and decision rules.
+- **Research & Manuscript** — the approved manuscript download, priority WHO,
+  BMBL, ISO 35001, and ISO 31000 references, and supporting scientific
+  literature.
 - **About MOBRA** — identity, validation boundary, scope, and future-data compatibility.
+
+## Optional secure access
+
+MOBRA has no default or hardcoded username or password. The application remains
+open when authentication is not configured. Adding both a username and a
+PBKDF2 password hash to Streamlit Secrets enables the branded login gate by
+default; `enabled = false` can explicitly keep it open.
+
+Generate a password hash locally without storing the plaintext password:
+
+```powershell
+python -c "from getpass import getpass; from mobra.auth import hash_password; print(hash_password(getpass('Password: ')))"
+```
+
+Then copy `.streamlit/secrets.toml.example` to a local, ignored
+`.streamlit/secrets.toml`, or paste the same settings into Streamlit Community
+Cloud **App settings → Secrets**:
+
+```toml
+[auth]
+enabled = true
+username = "your-username"
+password_hash = "pbkdf2_sha256$..."
+session_timeout_minutes = 60
+```
+
+Use the sidebar **Log out** control to end the authenticated session. Never
+commit the real `secrets.toml` file.
 
 ## Supported input formats
 
@@ -204,10 +243,12 @@ The HTML report includes the MOBRA identity, generation metadata, source status,
 ├── assets/                   # SVG/PNG branding, favicon, and screenshots
 ├── mobra/
 │   ├── actions.py            # Unified corrective-action register
+│   ├── auth.py               # Optional secrets-backed login and logout
 │   ├── charts.py             # Shared Plotly theme and figures
 │   ├── config.py             # Names, paths, palette, risk/decision constants
 │   ├── decisions.py          # Deployment rules and overrides
 │   ├── io.py                 # CSV/XLSX/XLS/JSON readers and detection
+│   ├── mission_map.py        # Synthetic interactive mission workflow
 │   ├── readiness.py          # BRI, domain readiness, Critical Controls
 │   ├── reporting.py          # HTML, Excel, JSON, and CSV exports
 │   ├── risk.py               # Risk scoring, categories, matrix counts
@@ -249,7 +290,7 @@ The suite covers:
 - Demonstration invariants: 24 hazards, 86.7% BRI, 11 failed Critical Controls, and DO NOT DEPLOY.
 - Default and every-page Streamlit smoke tests.
 
-Current verification result: **56 tests passed**. Live browser checks cover all twelve
+Current verification result: **62 tests passed**. Live browser checks cover all fourteen
 pages plus 1440×900, 1280×720, 1024×768, 820 px, and 768 px application
 viewports. The standalone report is also checked at desktop, 820 px, and 560 px.
 

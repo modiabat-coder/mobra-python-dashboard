@@ -21,6 +21,7 @@ from mobra.charts import (
     action_status_figure,
     bri_progress_figure,
     domain_figure,
+    executive_radial_gauge,
     hazards_by_domain_figure,
     heatmap_figure,
     initial_residual_figure,
@@ -75,6 +76,7 @@ from mobra.mapping import (
     validate_mapping,
 )
 from mobra.manuscript import manuscript_download_bytes, manuscript_metadata
+from mobra.mission_map import STATUS_COLORS, mission_map_deck, synthetic_mission_stages
 from mobra.operational_tools import (
     build_backup_zip,
     build_field_assessment_package,
@@ -103,6 +105,7 @@ from mobra.resources import (
     catalogue_csv_bytes,
     catalogue_xlsx_bytes,
     load_normative_resources,
+    load_supporting_literature,
     resource_catalogue_frame,
 )
 from mobra.risk import assert_heatmap_total, heatmap_total, valid_hazard_count
@@ -121,6 +124,7 @@ from mobra.validation_findings import (
     validate_cross_dataset_consistency,
 )
 from ui.components import (
+    logo_data_uri,
     render_decision_banner,
     render_empty_state,
     render_logo,
@@ -588,14 +592,29 @@ def _last_update(meta: dict[str, Any]) -> str:
 
 def render_home(context: AssessmentContext) -> None:
     """Render the executive summary landing page."""
+    logo_uri = logo_data_uri()
+    logo_html = (
+        f'<img class="mobra-hero-logo" src="{logo_uri}" '
+        f'alt="{escape(APP_NAME)} wordmark">'
+        if logo_uri
+        else f'<div class="mobra-hero-fallback">{escape(APP_NAME)}</div>'
+    )
     st.markdown(
         f"""
         <div class="mobra-hero">
-          <div class="mobra-eyebrow">EXECUTIVE OVERVIEW</div>
-          <h1>{APP_NAME}</h1>
-          <h3>{APP_FULL_NAME}</h3>
-          <p>{APP_DESCRIPTION}</p>
-          <p><strong>Active source:</strong> {escape(str(context.meta.get("source_label", "No data")))}</p>
+          <div class="mobra-hero-brand">
+            {logo_html}
+            <div class="mobra-hero-copy">
+              <div class="mobra-eyebrow">EXECUTIVE OVERVIEW</div>
+              <h1>Operational readiness at a glance</h1>
+              <h3>{escape(APP_FULL_NAME)}</h3>
+              <p>{escape(APP_DESCRIPTION)}</p>
+            </div>
+          </div>
+          <div class="mobra-hero-meta">
+            <span><strong>Active source</strong> · {escape(str(context.meta.get("source_label", "No data")))}</span>
+            <span><strong>Decision safeguards</strong> · Critical controls remain non-bypassable</span>
+          </div>
         </div>
         """,
         unsafe_allow_html=True,
@@ -604,6 +623,87 @@ def render_home(context: AssessmentContext) -> None:
     render_decision_banner(context.decision, context.reasons)
     failed_count = len(failed_critical_controls(context.requirements))
     risk_basis = decision_risk_column(context.hazards)
+    critical_flags = context.requirements.get(
+        "critical_control",
+        pd.Series(False, index=context.requirements.index),
+    )
+    if critical_flags.dtype == bool:
+        parsed_critical_flags = critical_flags.fillna(False)
+    else:
+        parsed_critical_flags = (
+            critical_flags.astype("string")
+            .str.strip()
+            .str.lower()
+            .isin(["true", "1", "yes", "y", "critical"])
+        )
+    critical_total = int(parsed_critical_flags.sum())
+    critical_satisfaction = (
+        100 * max(critical_total - failed_count, 0) / critical_total
+        if critical_total
+        else 0.0
+    )
+    elevated_count = int(
+        context.hazards.get(risk_basis, pd.Series(dtype="string"))
+        .isin(["High", "Extreme"])
+        .sum()
+    )
+    elevated_load = (
+        100 * elevated_count / len(context.hazards)
+        if len(context.hazards)
+        else 0.0
+    )
+
+    render_section_header(
+        "Executive Indicators",
+        icon="◔",
+        help_text=(
+            "Contextual visual indicators only. Formal deployment logic and "
+            "Critical Control overrides remain authoritative."
+        ),
+    )
+    gauge_columns = st.columns(3)
+    with gauge_columns[0]:
+        st.plotly_chart(
+            executive_radial_gauge(context.bri, "Overall BRI"),
+            width="stretch",
+            key="home_bri_radial",
+        )
+        st.caption(
+            "Weighted observed score ÷ maximum score. BRI alone never authorizes deployment."
+        )
+    with gauge_columns[1]:
+        st.plotly_chart(
+            executive_radial_gauge(
+                critical_satisfaction,
+                "Critical Controls Satisfied",
+            ),
+            width="stretch",
+            key="home_critical_controls_radial",
+        )
+        st.caption(
+            f"{max(critical_total - failed_count, 0)}/{critical_total} Critical Controls "
+            f"satisfied; {failed_count} remain non-bypassable blockers."
+        )
+    with gauge_columns[2]:
+        st.plotly_chart(
+            executive_radial_gauge(
+                elevated_load,
+                "High / Extreme Risk Load",
+                higher_is_better=False,
+            ),
+            width="stretch",
+            key="home_elevated_risk_radial",
+        )
+        st.caption(
+            f"{elevated_count}/{len(context.hazards)} hazards are High or Extreme "
+            f"using {risk_basis.replace('_', ' ')}."
+        )
+    st.info(
+        "Indicator colors support rapid review only. The formal result remains "
+        "governed by validated data, fixed risk thresholds, and the "
+        "non-bypassable deployment rules."
+    )
+
     residual_extreme = int(
         context.hazards.get(risk_basis, pd.Series(dtype="string")).eq("Extreme").sum()
     )
@@ -724,14 +824,17 @@ def render_home(context: AssessmentContext) -> None:
         )
 
     render_section_header("Detailed Analysis and Reports", icon="→")
-    button_columns = st.columns(4)
+    button_columns = st.columns(3)
     destinations = [
         ("Open Risk Analysis", "Risk Analysis"),
         ("Open Readiness Dashboard", "Readiness Dashboard"),
+        ("Open Mission Map", "Mission Map"),
         ("Review Deployment Decision", "Deployment Decision"),
         ("Open Reports and Export", "Reports and Export"),
+        ("Open Research & References", "Research and References"),
     ]
-    for column, (label, page) in zip(button_columns, destinations):
+    for index, (label, page) in enumerate(destinations):
+        column = button_columns[index % len(button_columns)]
         with column:
             if st.button(label, width="stretch"):
                 navigate_to(page)
@@ -2353,6 +2456,109 @@ def render_reports_export(context: AssessmentContext) -> None:
     st.components.v1.html(html, height=780, scrolling=True)
 
 
+def render_mission_map(context: AssessmentContext) -> None:
+    """Render the synthetic deployment workflow as an interactive map."""
+    render_page_header(
+        "Mission Map",
+        "Interactive, synthetic mission gates linked to the active MOBRA assessment.",
+        icon="⌖",
+        status="Illustrative workflow",
+    )
+    st.warning(
+        "This map is a synthetic workflow visualization. Coordinates and routes "
+        "are illustrative only and do not represent a real laboratory, incident, "
+        "deployment site, or operational movement."
+    )
+    failed_count = len(failed_critical_controls(context.requirements))
+    stages = synthetic_mission_stages(
+        context.decision,
+        context.bri,
+        failed_count,
+        len(context.hazards),
+    )
+    render_metric_grid(
+        [
+            ("Workflow Stages", len(stages), "Synthetic decision gates", PRIMARY_COLOR),
+            ("Overall BRI", _format_bri(context.bri), "Weighted readiness", PRIMARY_COLOR),
+            (
+                "Failed Critical Controls",
+                failed_count,
+                "Non-bypassable blockers",
+                DANGER_COLOR,
+            ),
+            (
+                "Deployment Decision",
+                context.decision,
+                "Canonical MOBRA rule output",
+                DECISION_COLORS.get(context.decision, PRIMARY_COLOR),
+            ),
+        ]
+    )
+    render_decision_banner(context.decision, context.reasons)
+    render_section_header(
+        "Interactive Mission Workflow",
+        icon="⌖",
+        help_text="Hover over a numbered gate for status, progress, and active-assessment context.",
+    )
+    try:
+        st.pydeck_chart(
+            mission_map_deck(stages),
+            width="stretch",
+            height=560,
+            key="mobra_mission_workflow_map",
+        )
+    except (ValueError, TypeError) as exc:
+        render_empty_state(
+            "Mission workflow unavailable",
+            f"The synthetic workflow could not be rendered: {exc}",
+            icon="⌖",
+        )
+    legend_items = []
+    for status in stages["status"].drop_duplicates():
+        red, green, blue, _ = STATUS_COLORS[str(status)]
+        legend_items.append(
+            '<span class="mobra-map-legend-item">'
+            f'<i style="background:rgb({red},{green},{blue})"></i>{escape(str(status))}'
+            "</span>"
+        )
+    st.markdown(
+        '<div class="mobra-map-legend" aria-label="Mission map status legend">'
+        + "".join(legend_items)
+        + "</div>",
+        unsafe_allow_html=True,
+    )
+    st.caption(
+        "Map status is derived only from the existing MOBRA Deployment Decision. "
+        "It does not create a new scientific score or override the decision engine."
+    )
+    render_section_header("Gate Detail", icon="□")
+    st.dataframe(
+        stages[
+            [
+                "stage_id",
+                "stage",
+                "status",
+                "progress_pct",
+                "description",
+            ]
+        ],
+        width="stretch",
+        hide_index=True,
+        column_config={
+            "stage_id": st.column_config.TextColumn("Gate"),
+            "stage": st.column_config.TextColumn("Workflow Stage"),
+            "status": st.column_config.TextColumn("Status"),
+            "progress_pct": st.column_config.ProgressColumn(
+                "Progress",
+                min_value=0,
+                max_value=100,
+                format="%d%%",
+            ),
+            "description": st.column_config.TextColumn("Interpretation"),
+        },
+    )
+
+
 def render_methodology(context: AssessmentContext) -> None:
     """Explain fixed formulas, terms, and deployment rules."""
     render_page_header(
@@ -2420,6 +2626,201 @@ def render_methodology(context: AssessmentContext) -> None:
     for index, topic in enumerate(help_topics()):
         with help_columns[index % 2]:
             render_help(topic, st)
+
+
+def render_research_references(context: AssessmentContext) -> None:
+    """Expose the manuscript, normative references, and supporting literature."""
+    manuscript = manuscript_metadata()
+    try:
+        resources = load_normative_resources()
+    except ValueError as exc:
+        resources = []
+        st.warning(f"Normative resource catalogue unavailable: {exc}")
+    try:
+        literature = load_supporting_literature()
+    except (ValueError, OSError) as exc:
+        literature = []
+        st.warning(f"Supporting literature unavailable: {exc}")
+
+    render_page_header(
+        "Research and References",
+        "MOBRA manuscript access, priority normative sources, and supporting scientific literature.",
+        icon="□",
+        status="Research transparency",
+    )
+    render_metric_grid(
+        [
+            (
+                "Manuscript",
+                "Available" if manuscript["manuscript_download_enabled"] else "Unavailable",
+                manuscript["manuscript_filename"],
+                PRIMARY_COLOR,
+            ),
+            (
+                "Normative Sources",
+                len(resources),
+                "Official-page links and citations",
+                PRIMARY_COLOR,
+            ),
+            (
+                "Supporting Studies",
+                len(literature),
+                "Scientific literature catalogue",
+                PRIMARY_COLOR,
+            ),
+            (
+                "Current Assessment",
+                context.decision,
+                f"BRI {_format_bri(context.bri)}",
+                DECISION_COLORS.get(context.decision, PRIMARY_COLOR),
+            ),
+        ]
+    )
+    manuscript_tab, normative_tab, literature_tab = st.tabs(
+        ["Research Manuscript", "Normative References", "Supporting Literature"]
+    )
+    with manuscript_tab:
+        render_section_header("MOBRA Research Manuscript", icon="□")
+        if manuscript["manuscript_download_enabled"]:
+            manuscript_columns = st.columns(3)
+            manuscript_columns[0].metric(
+                "Pages",
+                manuscript["manuscript_page_count"] or "N/A",
+            )
+            manuscript_columns[1].metric(
+                "File Size",
+                _file_size_label(manuscript["manuscript_size_bytes"]),
+            )
+            manuscript_columns[2].metric(
+                "Author",
+                manuscript["manuscript_author"],
+            )
+            st.info(manuscript["manuscript_version_note"])
+            st.download_button(
+                "Download MOBRA Research Manuscript (PDF)",
+                manuscript_download_bytes(),
+                manuscript["manuscript_filename"],
+                "application/pdf",
+                width="stretch",
+                key="research_manuscript_download",
+            )
+        else:
+            render_empty_state(
+                "Research manuscript not included",
+                "A manuscript placeholder is active for this deployment. Add the approved PDF under docs to enable download.",
+                icon="□",
+            )
+
+    with normative_tab:
+        render_section_header(
+            "Priority Normative References",
+            icon="□",
+            help_text=(
+                "Official source links for the primary biosafety, biosecurity, "
+                "mobile-laboratory, biorisk, and risk-management references."
+            ),
+        )
+        priority_ids = [
+            "WHO-01",
+            "WHO-02",
+            "WHO-03",
+            "WHO-04",
+            "BMBL-01",
+            "ISO-01",
+            "ISO-02",
+        ]
+        priority_order = {resource_id: index for index, resource_id in enumerate(priority_ids)}
+        ordered_resources = sorted(
+            resources,
+            key=lambda item: (
+                priority_order.get(str(item.get("resource_id")), len(priority_order)),
+                str(item.get("title", "")),
+            ),
+        )
+        for resource in ordered_resources:
+            label = (
+                f"{resource.get('resource_id', '')} · "
+                f"{resource.get('title', 'Untitled reference')}"
+            )
+            with st.expander(label, expanded=False):
+                st.markdown(f"**Citation**  \n{resource.get('citation', 'Not available')}")
+                st.markdown(
+                    f"**Relevance to MOBRA**  \n"
+                    f"{resource.get('relevance_to_mobra', 'Not documented')}"
+                )
+                st.caption(
+                    f"{resource.get('issuing_organization', '')} · "
+                    f"{resource.get('edition', '')} · "
+                    f"{resource.get('access_type', '')} · "
+                    f"{resource.get('redistribution_status', '')}"
+                )
+                official_url = str(resource.get("official_page_url", ""))
+                if official_url:
+                    st.link_button(
+                        "Open official source",
+                        official_url,
+                        width="stretch",
+                    )
+        if resources:
+            st.download_button(
+                "Download Normative Reference Catalogue (CSV)",
+                catalogue_csv_bytes(resources),
+                "MOBRA_Normative_Resources.csv",
+                "text/csv",
+                width="stretch",
+                key="research_reference_catalogue",
+            )
+        st.caption(
+            "Official links and citations do not imply endorsement, certification, "
+            "accreditation, or scientific validation by WHO, CDC, NIH, ISO, or any "
+            "other issuing organization. Copyrighted ISO documents are not redistributed."
+        )
+
+    with literature_tab:
+        render_section_header("Supporting Scientific Literature", icon="□")
+        if literature:
+            literature_frame = pd.DataFrame(literature)
+            visible_columns = [
+                "citation_id",
+                "title",
+                "authors",
+                "year",
+                "journal",
+                "evidence_role",
+                "official_or_publisher_url",
+                "access_type",
+            ]
+            st.dataframe(
+                literature_frame[
+                    [column for column in visible_columns if column in literature_frame.columns]
+                ],
+                width="stretch",
+                hide_index=True,
+                height=440,
+                column_config={
+                    "official_or_publisher_url": st.column_config.LinkColumn(
+                        "Publisher / DOI",
+                        display_text="Open source",
+                    )
+                },
+            )
+            with st.expander("Citation details", expanded=False):
+                for item in literature:
+                    st.markdown(
+                        f"**{item.get('citation_id', '')} · {item.get('title', '')}**  \n"
+                        f"{item.get('authors', '')} ({item.get('year', '')}). "
+                        f"*{item.get('journal', '')}*. DOI: `{item.get('doi', 'Not available')}`"
+                    )
+        else:
+            render_empty_state(
+                "Supporting literature unavailable",
+                "No supporting-literature catalogue is included in this deployment.",
+                icon="□",
+            )
+        st.caption(
+            "Supporting literature informs interpretation and future validation work; "
+            "it does not change the current MOBRA formulas, thresholds, or decision rules."
+        )
 
 
 def render_about(context: AssessmentContext) -> None:
@@ -2604,10 +3005,12 @@ PAGE_RENDERERS = {
     "Hazard Register": render_hazard_register,
     "Risk Analysis": render_risk_analysis,
     "Readiness Dashboard": render_readiness_dashboard,
+    "Mission Map": render_mission_map,
     "Deployment Decision": render_deployment_decision,
     "Corrective Actions": render_corrective_actions,
     "Reports and Export": render_reports_export,
     "Methodology": render_methodology,
+    "Research and References": render_research_references,
     "About MOBRA": render_about,
 }
 

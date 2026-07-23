@@ -36,6 +36,16 @@ def _icon_data_uri() -> str:
     return f"data:image/svg+xml;base64,{encoded}"
 
 
+@lru_cache(maxsize=2)
+def logo_data_uri(*, dark_background: bool = False) -> str:
+    """Return the appropriate wordmark as an embeddable SVG data URI."""
+    path = Path(LOGO_DARK_PATH if dark_background else LOGO_PATH)
+    if not path.exists():
+        return ""
+    encoded = base64.b64encode(path.read_bytes()).decode("ascii")
+    return f"data:image/svg+xml;base64,{encoded}"
+
+
 def render_logo(*, dark_background: bool = False, width: int = 300) -> None:
     """Render the appropriate transparent MOBRA wordmark."""
     path = LOGO_DARK_PATH if dark_background else LOGO_PATH

@@ -9,6 +9,7 @@ from typing import Any
 import pandas as pd
 import streamlit as st
 
+from mobra.auth import authentication_gate, load_auth_config, render_logout_control
 from mobra.charts import bri_gauge, heatmap_figure
 from mobra.config import APP_FULL_NAME, APP_NAME, FAVICON_PATH
 from mobra.io import read_data_file
@@ -61,6 +62,9 @@ def main() -> None:
         },
     )
     apply_global_styles()
+    auth_config = load_auth_config()
+    if not authentication_gate(auth_config):
+        return
     initialize_session_state()
     meta = active_data()
     context = build_assessment_context(meta)
@@ -69,6 +73,7 @@ def main() -> None:
         context.hazard_result,
         context.requirement_result,
     )
+    render_logout_control(auth_config)
     render_page(page, context)
 
 

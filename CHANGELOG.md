@@ -2,6 +2,37 @@
 
 All notable changes to MOBRA are documented in this file.
 
+## [Unreleased] - 2026-07-24
+
+### Added
+
+- Optional Streamlit-Secrets authentication with PBKDF2 password hashes,
+  session timeout, branded sign-in, and explicit logout.
+- Three contextual radial executive indicators on Home for BRI, satisfied
+  Critical Controls, and High/Extreme risk load.
+- Synthetic, interactive Mission Map workflow with tooltips, progress,
+  decision-linked gate status, and a visible legend.
+- Dedicated Research and References page for the approved manuscript, WHO
+  Laboratory Biosafety Manual, WHO biosecurity and mobile-laboratory guidance,
+  BMBL sixth edition, ISO 35001, ISO 31000, and supporting literature.
+- Streamlit Secrets example and deployment instructions.
+
+### Changed
+
+- Refined the Home hero composition, typography, wordmark placement, and
+  contextual metadata.
+- Increased and rebalanced the sidebar wordmark while preserving the existing
+  visual identity and responsive navigation.
+- Extended navigation from twelve preserved views to fourteen by adding only
+  Mission Map and Research & Manuscript.
+
+### Verified
+
+- All twelve original views remain present.
+- Scientific invariants and non-bypassable decision logic remain unchanged.
+- 62 automated tests pass, including authentication, all fourteen pages,
+  gauges, map workflow, manuscript, and priority references.
+
 ## [1.0.0] - 2026-07-23
 
 ### Added

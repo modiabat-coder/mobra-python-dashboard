@@ -4,6 +4,35 @@
 
 Deploy the repository `modiabat-coder/mobra-python-dashboard` from branch `main` with `app.py` as the entry point. Keep `requirements.txt` at the repository root. Do not commit `.venv`, real laboratory data, `.env` files, or `.streamlit/secrets.toml`.
 
+## Optional MOBRA login
+
+The application has no default or hardcoded credential. It remains open when no
+authentication values are configured. Supplying both a username and a PBKDF2
+password hash enables the login gate by default.
+
+Generate the password hash locally:
+
+```powershell
+python -c "from getpass import getpass; from mobra.auth import hash_password; print(hash_password(getpass('Password: ')))"
+```
+
+Paste the following into Streamlit Community Cloud **App settings → Secrets**
+and replace the placeholders:
+
+```toml
+[auth]
+enabled = true
+username = "replace-with-your-username"
+password_hash = "pbkdf2_sha256$..."
+session_timeout_minutes = 60
+```
+
+The real secret file is ignored by Git. Logout is available in the sidebar after
+successful sign-in. Environment-variable deployments may use
+`MOBRA_AUTH_ENABLED`, `MOBRA_AUTH_USERNAME`,
+`MOBRA_AUTH_PASSWORD_HASH`, and
+`MOBRA_AUTH_SESSION_TIMEOUT_MINUTES`.
+
 ## Author email
 
 The approved public application contact is `modiabat@gmail.com`. It is application metadata, not an SMTP credential. The example file documents the value for local configuration; the application remains functional if it is omitted.

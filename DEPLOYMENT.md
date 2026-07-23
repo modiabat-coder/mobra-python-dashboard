@@ -54,8 +54,9 @@ For a headless server:
 python -m streamlit run app.py --server.headless true --server.address 0.0.0.0
 ```
 
-Place TLS termination, authentication, and access controls in the hosting
-platform or reverse proxy appropriate to the deployment environment.
+Use TLS termination and any additional organization-level access controls
+provided by the hosting platform or reverse proxy. MOBRA also includes an
+optional application login described below.
 
 ## Test
 
@@ -64,7 +65,7 @@ python -m pytest -q -p no:cacheprovider
 python generate_demo_report.py
 ```
 
-Expected automated result for this release: 52 tests passed.
+Expected automated result for this release: 62 tests passed.
 
 The regenerated demonstration report is written to
 `MOBRA_Demo_Report.html`.
@@ -82,9 +83,33 @@ The regenerated demonstration report is written to
 ## Configuration and secrets
 
 - Streamlit presentation settings are stored in `.streamlit/config.toml`.
-- No secrets are required for the packaged application.
-- Do not add `.env`, `secrets.toml`, credentials, or private operational data to
-  a distributable release.
+- Authentication is optional and is enabled automatically when both a username
+  and password hash are configured, unless `enabled = false` is explicit.
+- No default or hardcoded credential exists.
+- Do not add `.env`, the real `.streamlit/secrets.toml`, credentials, or private
+  operational data to a distributable release.
+
+Generate a salted PBKDF2 hash locally:
+
+```powershell
+python -c "from getpass import getpass; from mobra.auth import hash_password; print(hash_password(getpass('Password: ')))"
+```
+
+Configure Streamlit Community Cloud under **App settings → Secrets**, using the
+shape documented in `.streamlit/secrets.toml.example`:
+
+```toml
+[auth]
+enabled = true
+username = "your-username"
+password_hash = "pbkdf2_sha256$..."
+session_timeout_minutes = 60
+```
+
+For an environment-variable deployment, the equivalent names are
+`MOBRA_AUTH_ENABLED`, `MOBRA_AUTH_USERNAME`,
+`MOBRA_AUTH_PASSWORD_HASH`, and
+`MOBRA_AUTH_SESSION_TIMEOUT_MINUTES`.
 
 ## Scientific release checks
 
@@ -111,4 +136,5 @@ A high BRI never overrides a failed critical control.
 - Validate uploaded schemas and review all warnings before using an assessment
   result.
 - Keep synthetic data clearly separated from operational evidence.
-
+- The Mission Map uses synthetic coordinates only. Its public basemap tiles may
+  require outbound web access; the MOBRA calculations and workflow state do not.

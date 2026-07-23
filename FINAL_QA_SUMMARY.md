@@ -19,8 +19,8 @@ Release date: 2026-07-24
 ## Automated verification
 
 - Python compilation: passed.
-- Automated tests: 56 passed.
-- All twelve application pages: passed Streamlit test harness.
+- Automated tests: 62 passed.
+- All fourteen application pages: passed Streamlit test harness.
 - CSV, XLSX, legacy XLS, and JSON import tests: passed.
 - BRI, risk boundaries, heatmap totals, axes, and decision overrides: passed.
 - HTML and Excel export structure: passed.
@@ -43,11 +43,22 @@ Release date: 2026-07-24
 - Report document overflow: none.
 - Final application browser-console errors: 0.
 - Final report browser-console errors: 0.
-- Restored navigation and analysis checks: all twelve sidebar items visible;
+- Restored navigation and analysis checks: all fourteen sidebar items visible;
+  the original twelve remain present; authentication, Mission Map, and
+  Research & Manuscript smoke checks passed;
   Risk Matrix & Heatmap verified with 24 hazards; requirement mapping and
   governance sections verified in the local browser.
 - Current responsive recheck: desktop, 768 px, and 560 px; no horizontal page
   overflow and the narrow sidebar remained collapsible.
+- Controlled-enhancement recheck: 1280×720, 768×900, 560×900, and 390×844;
+  no horizontal overflow, the Home hero stacked cleanly, gauges wrapped to one
+  column on the smaller phone width, and the sidebar collapsed at phone widths.
+- Mission Map: interactive map region, four status legend items, synthetic-data
+  warning, 86.7% BRI, 11 failed Critical Controls, and DO NOT DEPLOY verified.
+- Research & Manuscript: 22-page PDF download, nine normative sources, five
+  supporting studies, and the requested WHO, BMBL, ISO 35001, and ISO 31000
+  entries verified.
+- Final controlled-enhancement browser-console errors and warnings: 0.
 
 ## Scope boundary
 

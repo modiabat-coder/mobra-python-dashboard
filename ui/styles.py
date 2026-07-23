@@ -85,13 +85,13 @@ def apply_global_styles() -> None:
             color: var(--mobra-sidebar-muted) !important;
         }}
         [data-testid="stSidebar"] [data-testid="stImage"] {{
-            width: 118%;
+            width: 123%;
             max-width: none;
-            margin: .55rem 0 .8rem -9%;
+            margin: .38rem 0 .95rem -11.5%;
         }}
         [data-testid="stSidebar"] [data-testid="stImage"] img {{
             width: 100%;
-            max-height: 94px;
+            max-height: 108px;
             object-fit: contain;
         }}
         .mobra-sidebar-rule {{
@@ -250,9 +250,33 @@ def apply_global_styles() -> None:
             border: 1px solid var(--mobra-border);
             border-left: 5px solid var(--mobra-secondary);
             border-radius: var(--mobra-radius-lg);
-            padding: 1.25rem 1.4rem;
+            padding: 1.45rem 1.55rem 1.2rem;
             margin-bottom: 1.1rem;
             box-shadow: var(--mobra-shadow);
+        }}
+        .mobra-hero-brand {{
+            display: grid;
+            grid-template-columns: minmax(220px, .72fr) minmax(0, 1.65fr);
+            align-items: center;
+            gap: clamp(1.25rem, 2.7vw, 2.8rem);
+        }}
+        .mobra-hero-logo {{
+            display: block;
+            width: min(100%, 310px);
+            max-height: 112px;
+            object-fit: contain;
+            object-position: left center;
+        }}
+        .mobra-hero-fallback {{
+            color: var(--mobra-primary);
+            font-size: 2.1rem;
+            font-weight: 850;
+            letter-spacing: .04em;
+        }}
+        .mobra-hero-copy {{
+            min-width: 0;
+            padding-left: clamp(.2rem, 1vw, 1rem);
+            border-left: 1px solid var(--mobra-border);
         }}
         .mobra-eyebrow {{
             color: var(--mobra-secondary);
@@ -260,7 +284,10 @@ def apply_global_styles() -> None:
             font-weight: 800;
             letter-spacing: .09em;
         }}
-        .mobra-hero h1 {{ margin: .2rem 0 .12rem; }}
+        .mobra-hero h1 {{
+            margin: .24rem 0 .16rem;
+            font-size: clamp(1.7rem, 2.25vw, 2.2rem) !important;
+        }}
         .mobra-hero h3 {{
             margin: 0;
             color: var(--mobra-text);
@@ -269,6 +296,56 @@ def apply_global_styles() -> None:
             letter-spacing: 0;
         }}
         .mobra-hero p {{ margin: .45rem 0 0; color: var(--mobra-muted); }}
+        .mobra-hero-meta {{
+            display: flex;
+            flex-wrap: wrap;
+            gap: .55rem 1.25rem;
+            margin-top: 1rem;
+            padding-top: .85rem;
+            border-top: 1px solid var(--mobra-border);
+            color: var(--mobra-muted);
+            font-size: .83rem;
+        }}
+        .mobra-hero-meta strong {{ color: var(--mobra-primary); }}
+        .mobra-login-brand {{
+            margin: .2rem 0 1rem;
+            padding-top: .75rem;
+            border-top: 4px solid var(--mobra-secondary);
+        }}
+        .mobra-login-brand h2 {{
+            margin: .3rem 0 0;
+            text-align: center;
+        }}
+        .mobra-login-brand > p {{
+            margin: .2rem 0 1.15rem;
+            text-align: center;
+            color: var(--mobra-muted);
+        }}
+        .mobra-map-legend {{
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: .55rem;
+            margin: .55rem 0 .45rem;
+        }}
+        .mobra-map-legend-item {{
+            display: inline-flex;
+            align-items: center;
+            gap: .38rem;
+            border: 1px solid var(--mobra-border);
+            border-radius: 999px;
+            background: var(--mobra-surface);
+            padding: .32rem .62rem;
+            color: var(--mobra-text);
+            font-size: .78rem;
+            font-weight: 700;
+        }}
+        .mobra-map-legend-item i {{
+            width: .72rem;
+            height: .72rem;
+            border-radius: 50%;
+            box-shadow: 0 0 0 1px rgba(8,42,56,.18);
+        }}
         .mobra-page-header {{
             display: flex;
             align-items: flex-start;
@@ -440,12 +517,32 @@ def apply_global_styles() -> None:
                 width: auto !important;
                 min-width: min(210px, 100%) !important;
             }}
+            .mobra-hero-brand {{
+                grid-template-columns: minmax(0, 1fr);
+                gap: .85rem;
+            }}
+            .mobra-hero-logo {{
+                width: min(76vw, 285px);
+                max-height: 98px;
+            }}
+            .mobra-hero-copy {{
+                padding: .85rem 0 0;
+                border-left: 0;
+                border-top: 1px solid var(--mobra-border);
+            }}
         }}
         @media (max-width: 780px) {{
             .mobra-metric-grid {{ grid-template-columns: minmax(0, 1fr); }}
             .mobra-metric-card {{ min-height: 108px; }}
             .mobra-page-heading {{ align-items: flex-start; }}
             .mobra-page-header p {{ font-size: .92rem; }}
+            .mobra-hero {{
+                padding: 1.12rem 1.05rem;
+            }}
+            .mobra-hero h1 {{
+                font-size: 1.55rem !important;
+            }}
+            .mobra-login-brand {{ margin-top: 0; }}
         }}
         @media print {{
             [data-testid="stSidebar"], [data-testid="stHeader"] {{ display:none !important; }}

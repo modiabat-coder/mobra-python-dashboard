@@ -10,6 +10,7 @@ import pandas as pd
 import pytest
 
 from mobra.acceptance import RiskAcceptancePolicy, apply_risk_acceptance
+from mobra.auth import hash_password, load_auth_config, verify_password
 from mobra.config import (
     DECISION_CONDITIONAL,
     DECISION_DO_NOT_DEPLOY,
@@ -26,10 +27,11 @@ from mobra.educational_media import (
     educational_media_package,
     load_educational_media,
 )
-from mobra.charts import heatmap_figure
+from mobra.charts import executive_radial_gauge, heatmap_figure
 from mobra.io import list_excel_sheets, read_data_file, read_json_collections
 from mobra.mapping import mapping_coverage_summary, validate_mapping
 from mobra.manuscript import manuscript_is_current, manuscript_metadata
+from mobra.mission_map import mission_map_deck, synthetic_mission_stages
 from mobra.operational_tools import (
     build_field_assessment_package,
     build_hazard_pdf,
@@ -37,7 +39,11 @@ from mobra.operational_tools import (
 )
 from mobra.readiness import calculate_bri, domain_readiness, failed_critical_controls
 from mobra.reporting import make_excel_workbook, make_html_report
-from mobra.resources import load_normative_resources, validate_resource_manifest
+from mobra.resources import (
+    load_normative_resources,
+    load_supporting_literature,
+    validate_resource_manifest,
+)
 from mobra.risk import assert_heatmap_total, classify_risk, heatmap_counts, heatmap_total
 from mobra.validation import (
     suggest_column_mapping,
@@ -354,9 +360,114 @@ def test_metric_grid_has_responsive_structure() -> None:
     assert "--metric-columns:4" in html
 
 
-def test_navigation_has_exactly_twelve_pages() -> None:
-    assert len(PAGE_ORDER) == 12
-    assert len(set(PAGE_ORDER)) == 12
+def test_navigation_preserves_twelve_pages_and_adds_two_controlled_views() -> None:
+    original_pages = {
+        "Home",
+        "Data Import",
+        "Data Validation",
+        "Requirements Assessment",
+        "Hazard Register",
+        "Risk Analysis",
+        "Readiness Dashboard",
+        "Deployment Decision",
+        "Corrective Actions",
+        "Reports and Export",
+        "Methodology",
+        "About MOBRA",
+    }
+    assert len(PAGE_ORDER) == 14
+    assert len(set(PAGE_ORDER)) == 14
+    assert original_pages.issubset(PAGE_ORDER)
+    assert {"Mission Map", "Research and References"}.issubset(PAGE_ORDER)
+
+
+def test_password_hash_round_trip_and_rejects_wrong_password() -> None:
+    encoded = hash_password(
+        "correct horse battery staple",
+        salt=b"0123456789abcdef",
+    )
+    assert encoded.startswith("pbkdf2_sha256$600000$")
+    assert verify_password("correct horse battery staple", encoded)
+    assert not verify_password("incorrect", encoded)
+    assert not verify_password("correct horse battery staple", "invalid")
+
+
+def test_authentication_enables_only_from_external_configuration() -> None:
+    disabled = load_auth_config(environ={}, secret_auth={})
+    assert not disabled.enabled
+    configured = load_auth_config(
+        environ={},
+        secret_auth={
+            "username": "reviewer",
+            "password_hash": "pbkdf2_sha256$600000$00$00",
+            "session_timeout_minutes": 45,
+        },
+    )
+    assert configured.enabled and configured.ready
+    assert configured.username == "reviewer"
+    assert configured.session_timeout_minutes == 45
+
+
+def test_login_gate_and_logout_streamlit_smoke(monkeypatch: pytest.MonkeyPatch) -> None:
+    from streamlit.testing.v1 import AppTest
+
+    monkeypatch.setenv("MOBRA_AUTH_ENABLED", "true")
+    monkeypatch.setenv("MOBRA_AUTH_USERNAME", "reviewer")
+    monkeypatch.setenv(
+        "MOBRA_AUTH_PASSWORD_HASH",
+        hash_password("test-password", salt=b"0123456789abcdef"),
+    )
+    app = AppTest.from_file(str(ROOT / "app.py")).run(timeout=30)
+    assert not app.exception
+    assert [item.label for item in app.text_input] == ["Username", "Password"]
+    assert not app.radio
+    app.text_input[0].set_value("reviewer")
+    app.text_input[1].set_value("test-password")
+    app.button[0].click()
+    app.run(timeout=30)
+    assert not app.exception
+    assert app.radio[0].label == "Navigation"
+    assert any(button.label == "Log out" for button in app.button)
+
+
+def test_executive_radial_gauges_are_context_only_and_bounded() -> None:
+    readiness = executive_radial_gauge(86.7, "Overall BRI")
+    risk_load = executive_radial_gauge(37.5, "High / Extreme Risk Load", higher_is_better=False)
+    assert readiness.data[0].value == pytest.approx(86.7)
+    assert risk_load.data[0].value == pytest.approx(37.5)
+    assert readiness.data[0].gauge.axis.range == (0, 100)
+    assert readiness.data[0].gauge.steps[0].range == (0, 50)
+    assert risk_load.data[0].gauge.steps[0].range == (0, 25)
+
+
+def test_synthetic_mission_map_reflects_non_bypassable_decision() -> None:
+    stages = synthetic_mission_stages(
+        DECISION_DO_NOT_DEPLOY,
+        86.7,
+        11,
+        24,
+    )
+    assert len(stages) == 4
+    assert stages["hazard_count"].eq(24).all()
+    assert stages["failed_controls"].eq(11).all()
+    assert stages.loc[stages["stage"].eq("Site setup gate"), "status"].item() == "Blocked"
+    assert len(mission_map_deck(stages).layers) == 3
+
+
+def test_priority_references_and_supporting_literature_are_available() -> None:
+    resources = load_normative_resources()
+    resource_ids = {resource["resource_id"] for resource in resources}
+    assert {
+        "WHO-01",
+        "WHO-03",
+        "WHO-04",
+        "BMBL-01",
+        "ISO-01",
+        "ISO-02",
+    }.issubset(resource_ids)
+    literature = load_supporting_literature()
+    assert literature
+    assert all(item.get("title") for item in literature)
 
 
 def test_preserved_mapping_and_governance_features_do_not_change_invariants() -> None:
@@ -501,10 +612,12 @@ def test_every_application_page_smoke() -> None:
         "Hazard Register",
         "Risk Analysis",
         "Readiness Dashboard",
+        "Mission Map",
         "Deployment Decision",
         "Corrective Actions",
         "Reports and Export",
         "Methodology",
+        "Research and References",
         "About MOBRA",
     ]
     for page in pages:

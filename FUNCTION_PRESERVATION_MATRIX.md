@@ -29,7 +29,7 @@ canonical failed-Critical-Control count.
 
 | Requirement | Current implementation |
 |---|---|
-| Twelve application views | Preserved; all twelve are visible in the sidebar radio navigation. |
+| Fourteen application views | The original twelve are preserved; Mission Map and Research & Manuscript are additive views. |
 | Risk analysis discoverability | Sidebar label explicitly identifies `Risk Matrix & Heatmap`. |
 | Current-page visibility | Selected navigation item receives a persistent highlighted state. |
 | Responsive visual system | Existing MOBRA dark-teal identity, cards, spacing, and responsive CSS preserved. |
@@ -37,7 +37,7 @@ canonical failed-Critical-Control count.
 
 ## Functional preservation
 
-| Functional area | Location in the current twelve-view structure |
+| Functional area | Location in the current fourteen-view structure |
 |---|---|
 | CSV, XLSX, XLS, and JSON import | Data Import |
 | Nested JSON collection selection | Data Import |
@@ -57,6 +57,8 @@ canonical failed-Critical-Control count.
 | Verified 5 × 5 heatmap | Risk Matrix & Heatmap |
 | Provisional risk-acceptance analysis | Risk Matrix & Heatmap |
 | BRI and domain readiness | Readiness Dashboard |
+| Contextual radial BRI/control/risk indicators | Home |
+| Synthetic interactive mission workflow | Mission Map |
 | Non-bypassable decision evidence | Deployment Decision |
 | Corrective-action register | Corrective Actions |
 | HTML, XLSX, JSON, and CSV exports | Reports and Export |
@@ -67,13 +69,16 @@ canonical failed-Critical-Control count.
 | Scientific formulas and decision rules | Methodology |
 | Contextual help topics | Methodology |
 | Educational poster catalogue and ZIP package | About MOBRA |
-| Research manuscript metadata and PDF download | About MOBRA |
+| Research manuscript metadata and PDF download | Research & Manuscript; About MOBRA |
+| Priority normative references and supporting literature | Research & Manuscript |
+| Optional secrets-backed sign-in and logout | Application entry gate; sidebar |
 | Scope, limitations, provenance, repository, and contact | About MOBRA |
 
 ## Verification
 
-The automated suite currently contains 56 passing tests. It verifies the
+The automated suite currently contains 62 passing tests. It verifies the
 scientific invariants, risk bands, heatmap axes and totals, import formats,
-standalone HTML report, workbook structure, all twelve Streamlit pages,
+standalone HTML report, workbook structure, all fourteen Streamlit pages,
 mapping and governance compatibility, non-bypassable Extreme-risk policy,
-field packages, printable PDFs, and the normative resource catalogue.
+field packages, printable PDFs, authentication, the synthetic mission workflow,
+executive gauges, manuscript access, and the normative resource catalogue.
