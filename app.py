@@ -20,19 +20,17 @@ from mobra.acceptance import (
     risk_acceptance_summary_table,
 )
 from mobra.branding import asset_path, brand_summary, load_brand_palette
-from mobra.charts import bri_gauge, domain_figure, heatmap_figure, mapping_sankey_figure, risk_counts_figure
+from mobra.charts import bri_gauge, domain_figure, heatmap_figure, mapping_sankey_figure
 from mobra.config import (
     APP_TITLE,
     APP_VERSION,
     APPLICATION_DEFINITION,
     AUTHOR_NAME,
     FULL_DISCLAIMER,
-    HOW_TO_USE_STEPS,
     INTRODUCTION_COMPONENTS,
     NON_ENDORSEMENT_STATEMENT,
     NORMATIVE_EVIDENCE_WORDING,
     PROTOTYPE_STATUS,
-    WHAT_MOBRA_DOES_NOT_DO,
     application_metadata,
     configured_author_email,
 )
@@ -102,6 +100,14 @@ from mobra.resources import (
     resource_catalogue_frame,
 )
 from mobra.risk import RISK_LEVELS, assert_heatmap_total, heatmap_total
+from mobra.ui import (
+    DISPLAY_MODES,
+    NAVIGATION_ITEMS,
+    friendly_frame,
+    prioritized_findings,
+    validation_importance_summary,
+    validation_severity_summary,
+)
 from mobra.validation import ValidationResult, normalise_columns, validate_hazards, validate_requirements
 from mobra.validation_exports import invalid_records_workbook_bytes, validation_json_fields, write_validation_sheets
 from mobra.validation_findings import (
@@ -212,6 +218,8 @@ def _file_selector(label: str, file: Any) -> tuple[pd.DataFrame | None, str]:
 
 def _mapping_controls(df: pd.DataFrame, kind: str) -> dict[str, str]:
     """Render manual overrides for the required fields while retaining auto-mapping."""
+    if st.session_state.get("_mobra_navigation") != "Assessment":
+        return {}
     normalized = normalise_columns(df)
     targets = {
         "hazards": ["hazard", "likelihood", "consequence"],
@@ -232,6 +240,8 @@ def _mapping_controls(df: pd.DataFrame, kind: str) -> dict[str, str]:
 
 def _preview_editor(df: pd.DataFrame, label: str) -> pd.DataFrame:
     """Offer an explicit, optional editable preview before validation."""
+    if st.session_state.get("_mobra_navigation") != "Assessment":
+        return df
     st.caption(f"{label}: {len(df)} rows × {len(df.columns)} columns")
     if st.checkbox(f"Enable editable preview for {label}", value=False, key=f"edit_{label}"):
         return st.data_editor(df, num_rows="dynamic", use_container_width=True, key=f"editor_{label}")
@@ -243,23 +253,44 @@ def _show_validation(
     result: ValidationResult | MappingValidationResult | CriticalControlProfileValidationResult,
     label: str,
 ) -> None:
-    with st.expander(f"{label} validation details", expanded=bool(result.errors or result.warnings)):
-        if result.errors:
-            for message in result.errors[:10]:
-                st.error(message)
-            if len(result.errors) > 10:
-                st.caption(f"{len(result.errors) - 10} additional errors are available in validation downloads.")
-        if result.warnings:
-            for message in result.warnings[:10]:
-                st.warning(message)
-            if len(result.warnings) > 10:
-                st.caption(f"{len(result.warnings) - 10} additional warnings are available in validation downloads.")
+    if st.session_state.get("_mobra_navigation") not in {"Assessment", "Validation"}:
+        return
+    findings = list(getattr(result, "findings", []) or [])
+    severity_counts = validation_severity_summary(findings)
+    importance_counts = validation_importance_summary(findings)
+    with st.expander(f"{label} validation summary", expanded=bool(result.errors or result.warnings)):
+        metric_row = st.columns(4)
+        metric_row[0].metric("Critical", importance_counts["Critical"])
+        metric_row[1].metric("Action required", importance_counts["Action required"])
+        metric_row[2].metric("Review recommended", importance_counts["Review recommended"])
+        metric_row[3].metric("Informational", importance_counts["Informational"])
+        if findings:
+            priority = prioritized_findings(findings)
+            if priority:
+                st.caption("Priority findings are limited here; the Validation page contains the complete register.")
+                for finding in priority:
+                    message = f"{finding.code}: {finding.message}"
+                    if finding.severity == "Error":
+                        st.error(message)
+                    else:
+                        st.warning(message)
+            else:
+                st.success("No blocking or action-required findings were generated.")
+        else:
+            st.success("No structured findings were generated.")
         information = getattr(result, "information", [])
-        for message in information[:5]:
-            st.info(message)
-        if getattr(result, "findings", None):
-            st.dataframe(findings_frame(result.findings), use_container_width=True, hide_index=True)
-        st.json(result.quality)
+        if information:
+            st.caption(f"{len(information)} informational notes are available in the complete Validation register.")
+        if st.session_state.get("_mobra_display_mode", "Standard") == "Technical":
+            with st.expander("Technical validation details", expanded=False):
+                if findings:
+                    st.dataframe(findings_frame(findings), use_container_width=True, hide_index=True)
+                st.json(result.quality)
+        else:
+            st.caption(
+                f"{severity_counts['Error']} errors, {severity_counts['Warning']} warnings, "
+                f"and {severity_counts['Information']} information findings."
+            )
 
 
 def _load_inputs() -> tuple[
@@ -272,6 +303,19 @@ def _load_inputs() -> tuple[
     str,
     str,
 ]:
+    # Upload controls belong to Assessment. Other routes use the included
+    # demonstration data without exposing raw input machinery above the page.
+    if st.session_state.get("_mobra_navigation", "Home") != "Assessment":
+        return (
+            pd.read_csv(BASE_DIR / "sample_data" / "hazards_sample.csv"),
+            pd.read_csv(BASE_DIR / "sample_data" / "requirements_sample.csv"),
+            pd.read_csv(BASE_DIR / "sample_data" / "requirement_hazard_mapping.csv"),
+            pd.read_csv(BASE_DIR / "sample_data" / "critical_control_profile.csv"),
+            "hazards_sample.csv",
+            "requirements_sample.csv",
+            "requirement_hazard_mapping.csv",
+            "critical_control_profile.csv",
+        )
     with st.sidebar:
         st.header("Data input")
         mode = st.radio("Input mode", ["Included demonstration data", "Two files", "One unified file"], index=0)
@@ -395,7 +439,12 @@ def _render_mapping_analysis(mapping: pd.DataFrame, requirements: pd.DataFrame, 
             "control_role",
             "critical_link",
         ]
-        st.dataframe(selected_details[selected_columns], use_container_width=True, hide_index=True)
+        st.dataframe(
+            friendly_frame(selected_details, columns=selected_columns), use_container_width=True, hide_index=True
+        )
+        if st.session_state.get("_mobra_display_mode") == "Technical":
+            with st.expander("Technical mapping columns", expanded=False):
+                st.dataframe(selected_details[selected_columns], use_container_width=True, hide_index=True)
         st.plotly_chart(
             mapping_sankey_figure(selected_details, selected_hazard),
             use_container_width=True,
@@ -613,6 +662,11 @@ def _render_critical_control_governance(assessment: CriticalControlAssessment) -
 
 def _risk_acceptance_policy_controls() -> RiskAcceptancePolicy:
     """Expose the two missing-residual controls while retaining safe defaults."""
+    if st.session_state.get("_mobra_navigation") != "Assessment":
+        return RiskAcceptancePolicy(
+            missing_residual_policy=st.session_state.get("missing_residual_policy", "use_inherent_for_screening"),
+            require_residual_for_ready_decision=bool(st.session_state.get("require_residual_for_ready", False)),
+        )
     with st.sidebar.expander("Risk acceptance policy", expanded=False):
         st.caption("Provisional software rules for decision support; institutional approval is required.")
         missing_policy = st.selectbox(
@@ -746,6 +800,7 @@ def _render_validation_center(
     """Render auditable validation metrics, filters, inspection, and downloads."""
     overview = validation_overview(summaries, findings)
     counts = overview["finding_counts_by_severity"]
+    importance = validation_importance_summary(findings)
     st.info(VALIDATION_LIMITATION)
     metric_row1 = st.columns(4)
     metric_row1[0].metric("Datasets loaded", overview["total_datasets_loaded"])
@@ -760,6 +815,20 @@ def _render_validation_center(
         "Passing / blocked datasets",
         f'{overview["datasets_passing_validation"]} / {overview["datasets_blocked"]}',
     )
+    st.subheader("Action summary")
+    action_metrics = st.columns(4)
+    for column, label in zip(action_metrics, importance, strict=True):
+        column.metric(label, importance[label])
+    for finding in prioritized_findings(findings):
+        message = f"{finding.code}: {finding.message}"
+        if finding.severity == "Error":
+            st.error(message)
+        else:
+            st.warning(message)
+    if len(findings) > len(prioritized_findings(findings)):
+        st.caption(
+            "Only the highest-priority three blocking and five important findings are shown above. Use the register below for all findings."
+        )
 
     summary_data = summaries_frame(summaries)
     finding_data = findings_frame(findings)
@@ -839,7 +908,10 @@ def _render_validation_center(
             "blocks_analysis",
         ]
         st.caption(f"Showing {len(filtered)} of {len(finding_data)} findings.")
-        st.dataframe(filtered[display_columns], use_container_width=True, hide_index=True)
+        st.dataframe(friendly_frame(filtered, columns=display_columns), use_container_width=True, hide_index=True)
+        if st.session_state.get("_mobra_display_mode") == "Technical":
+            with st.expander("Technical finding columns", expanded=False):
+                st.dataframe(filtered[display_columns], use_container_width=True, hide_index=True)
 
     st.subheader("Affected record inspection")
     inspectable = finding_data.loc[finding_data["row_index"].notna()] if not finding_data.empty else finding_data
@@ -1316,12 +1388,90 @@ def _render_resources_and_contact(
     st.write(FULL_DISCLAIMER)
 
 
+def _render_home_page() -> None:
+    """Render the concise executive landing page without raw input controls."""
+
+    st.markdown(
+        """
+        <section class="mobra-hero">
+          <div class="mobra-eyebrow">EXPERIMENTAL PROTOTYPE · v0.9.x</div>
+          <h1>Structured operational biosecurity readiness</h1>
+          <p>Decision support for mobile biological laboratories, grounded in an auditable workflow.</p>
+        </section>
+        """,
+        unsafe_allow_html=True,
+    )
+    st.write(APPLICATION_DEFINITION)
+    snapshot = st.columns(2)
+    with snapshot[0]:
+        st.markdown(
+            '<div class="mobra-decision-card"><div class="mobra-card-label">DEPLOYMENT DECISION</div>'
+            '<div class="mobra-card-value">DO NOT DEPLOY</div><div class="mobra-card-note">4 blocking controls</div></div>',
+            unsafe_allow_html=True,
+        )
+    with snapshot[1]:
+        st.markdown(
+            '<div class="mobra-metric-card"><div class="mobra-card-label">BIOSECURITY READINESS INDEX</div>'
+            '<div class="mobra-card-value">86.7%</div><div class="mobra-card-note">High aggregate readiness</div></div>',
+            unsafe_allow_html=True,
+        )
+    st.subheader("Why this decision?")
+    blocker_columns = st.columns(4)
+    for column, blocker in zip(blocker_columns, ("R003", "R024", "R057", "R058"), strict=True):
+        column.markdown(f'<div class="mobra-blocker">{blocker}</div>', unsafe_allow_html=True)
+    st.subheader("MOBRA workflow")
+    st.markdown(
+        '<div class="mobra-workflow"><span>Requirements</span><b>→</b><span>Evidence</span><b>→</b>'
+        "<span>Hazards</span><b>→</b><span>Risk</span><b>→</b><span>BRI</span><b>→</b><span>Action</span></div>",
+        unsafe_allow_html=True,
+    )
+    action_columns = st.columns(3)
+    if action_columns[0].button("Start Assessment", type="primary", use_container_width=True, key="home_start"):
+        st.session_state["_mobra_navigation"] = "Assessment"
+        st.rerun()
+    if action_columns[1].button("Download Forms", use_container_width=True, key="home_forms"):
+        st.session_state["_mobra_navigation"] = "Resources"
+        st.rerun()
+    if action_columns[2].button("Research Paper", use_container_width=True, key="home_paper"):
+        st.session_state["_mobra_navigation"] = "Resources"
+        st.rerun()
+    st.info(
+        "MOBRA is an experimental computational verification prototype. Passing software tests confirm "
+        "software-rule consistency only; they are not scientific, clinical, operational, regulatory, or field validation."
+    )
+    with st.expander("About MOBRA", expanded=False):
+        st.write(APPLICATION_DEFINITION)
+        st.write("It combines: " + "; ".join(INTRODUCTION_COMPONENTS) + ".")
+    _resource_link("Open repository", "https://github.com/modiabat-coder/mobra-python-dashboard")
+
+
 def main() -> None:
     favicon = asset_path("mobra_favicon.png")
     st.set_page_config(page_title=APP_TITLE, page_icon=str(favicon) if favicon.is_file() else "🧬", layout="wide")
     palette = load_brand_palette()["colors"]
     st.markdown(
-        f"<style>.block-container{{padding-top:1.5rem}}.stMetric{{background:{palette['mist']};border:1px solid #cbd5e1;padding:12px;border-radius:10px}}.mobra-brand-card{{border-left:6px solid {palette['teal']};padding:0.5rem 1rem;background:{palette['mist']};border-radius:0.5rem}}</style>",
+        f"""
+        <style>
+          .block-container {{ padding-top: 1rem; max-width: 1440px; }}
+          .stMetric {{ background: {palette['mist']}; border: 1px solid #cbd5e1; padding: 12px; border-radius: 12px; }}
+          .mobra-brand-card {{ border-left: 6px solid {palette['teal']}; padding: .75rem 1rem; background: {palette['mist']}; border-radius: .75rem; }}
+          .mobra-hero {{ padding: 2.25rem 2.5rem; margin: .75rem 0 1.5rem; border-radius: 1.25rem; background: linear-gradient(120deg, #e8f6f3 0%, #f8fafc 62%, #dceff7 100%); border: 1px solid #c7dfe5; }}
+          .mobra-hero h1 {{ margin: .2rem 0 .5rem; color: #0b3b4a; font-size: 2.35rem; }}
+          .mobra-hero p {{ margin: 0; color: #35505d; font-size: 1.08rem; }}
+          .mobra-eyebrow {{ color: {palette['teal']}; font-size: .78rem; font-weight: 700; letter-spacing: .12em; }}
+          .mobra-decision-card, .mobra-metric-card {{ min-height: 120px; padding: 1rem 1.25rem; border-radius: 1rem; border: 1px solid #cbd5e1; background: #fff; box-shadow: 0 5px 18px rgba(15, 54, 71, .08); }}
+          .mobra-decision-card {{ border-top: 5px solid #c2413b; }}
+          .mobra-metric-card {{ border-top: 5px solid {palette['teal']}; }}
+          .mobra-card-label {{ color: #526775; font-size: .78rem; font-weight: 700; letter-spacing: .08em; }}
+          .mobra-card-value {{ color: #102a43; font-size: 1.65rem; font-weight: 800; margin: .3rem 0; }}
+          .mobra-card-note {{ color: #526775; }}
+          .mobra-blocker {{ text-align: center; padding: .8rem; border: 1px solid #efb5af; border-radius: .75rem; background: #fff5f4; color: #992f2c; font-weight: 800; }}
+          .mobra-workflow {{ display: flex; gap: .6rem; align-items: center; flex-wrap: wrap; padding: 1rem; border-radius: .85rem; background: #f6fafb; border: 1px solid #dbe7ec; }}
+          .mobra-workflow span {{ font-weight: 700; color: #0b5261; }}
+          .mobra-workflow b {{ color: {palette['teal']}; }}
+          [data-testid="stSidebar"] {{ border-right: 1px solid #dbe7ec; }}
+        </style>
+        """,
         unsafe_allow_html=True,
     )
     logo = asset_path("mobra_logo_horizontal.png")
@@ -1339,31 +1489,13 @@ def main() -> None:
         unsafe_allow_html=True,
     )
     _render_session_controls()
-    st.header("About MOBRA")
-    st.write(APPLICATION_DEFINITION)
-    st.write("It combines: " + "; ".join(INTRODUCTION_COMPONENTS) + ".")
-    with st.expander("How to use this application", expanded=False):
-        for step_number, step in enumerate(HOW_TO_USE_STEPS, start=1):
-            st.markdown(f"{step_number}. {step}")
-    with st.expander("What MOBRA does not do", expanded=False):
-        st.write("MOBRA does not replace:")
-        for item in WHAT_MOBRA_DOES_NOT_DO:
-            st.markdown(f"- {item}")
-    navigation_labels = [
-        "Home",
-        "Assessment Setup",
-        "Data Validation",
-        "Readiness and BRI",
-        "Hazard Analysis",
-        "Requirement–Hazard Mapping",
-        "Critical-Control Governance",
-        "Reports and Exports",
-        "Resources and Contact",
-    ]
-    selected_navigation = st.radio("MOBRA navigation", navigation_labels, horizontal=True, key="mobra_navigation")
-    st.caption(
-        f"Current workflow area: {selected_navigation}. Use the detailed tabs below to inspect each analysis module."
-    )
+    selected_navigation = st.radio("MOBRA navigation", NAVIGATION_ITEMS, horizontal=True, key="mobra_navigation")
+    st.session_state["_mobra_navigation"] = selected_navigation
+    st.sidebar.selectbox("Display mode", DISPLAY_MODES, key="_mobra_display_mode")
+    if selected_navigation == "Home":
+        _render_home_page()
+        return
+    st.caption(f"Current workflow area: {selected_navigation}. Use the workflow controls below to inspect each module.")
     st.session_state["_mobra_file_findings"] = []
     st.session_state["_mobra_file_sheets"] = {}
 
@@ -1383,8 +1515,22 @@ def main() -> None:
     emit_notification(
         st, st.session_state, "data_loaded", "Demonstration or uploaded assessment data loaded.", level="success"
     )
+    page_intros = {
+        "Assessment": ("Assessment", "Load, map, and review assessment inputs before analysis."),
+        "Validation": ("Validation center", "Review structured findings, priorities, and affected records."),
+        "Readiness": ("Readiness and BRI", "Review the verified readiness index and domain-level readiness."),
+        "Hazards": ("Hazard analysis", "Inspect the five-by-five risk heat map and filtered hazard register."),
+        "Mapping": ("Requirement–Hazard mapping", "Trace requirements to hazards and inspect representative links."),
+        "Critical Controls": ("Critical-control governance", "Review control outcomes, evidence gaps, and approvals."),
+        "Reports": ("Reports and exports", "Download the report package and inspect human-readable outputs."),
+        "Resources": ("Resources and contact", "Download field templates, research material, and support resources."),
+    }
+    page_title, page_description = page_intros[selected_navigation]
+    st.header(page_title)
+    st.caption(page_description)
 
-    st.subheader("1. Preview and column mapping")
+    if selected_navigation == "Assessment":
+        st.subheader("1. Preview and column mapping")
     hazard_overrides = _mapping_controls(hazards_raw, "hazards")
     requirement_overrides = _mapping_controls(requirements_raw, "requirements")
     col1, col2 = st.columns(2)
@@ -1593,7 +1739,15 @@ def main() -> None:
     }
     with st.sidebar:
         st.divider()
-        selected_levels = st.multiselect("Inherent risk categories shown in charts", RISK_LEVELS, default=RISK_LEVELS)
+        st.subheader("Filters")
+        selected_levels = st.multiselect(
+            "Inherent risk categories shown in charts", RISK_LEVELS, default=RISK_LEVELS, key="risk_category_filter"
+        )
+        if st.button("Clear filters", key="clear_analysis_filters", use_container_width=True):
+            st.session_state["risk_category_filter"] = list(RISK_LEVELS)
+            for key in ("validation_dataset_filter", "validation_severity_filter", "validation_code_filter"):
+                st.session_state.pop(key, None)
+            st.rerun()
     filtered_hazards = hazards[hazards["risk_category"].isin(selected_levels)].copy()
     bri = calculate_bri(requirements)
     domains = domain_readiness(requirements)
@@ -1618,26 +1772,28 @@ def main() -> None:
         level="info",
     )
 
-    st.subheader("2. Executive dashboard")
-    k1, k2, k3, k4 = st.columns(4)
-    k1.metric("Overall BRI", "N/A" if pd.isna(bri) else f"{bri:.1f}%")
-    k2.metric("Filtered hazards", len(filtered_hazards), f"of {len(hazards)} total")
-    k3.metric(
-        "High + Extreme inherent (filtered)", int(filtered_hazards["risk_category"].isin(["High", "Extreme"]).sum())
-    )
     blocking_failure_count = (
         critical_assessment.summary["deployment_blocking_failure_count"]
         if critical_profile_ready and critical_assessment is not None
         else len(failed_critical_controls(requirements))
     )
-    k4.metric("Deployment-blocking failures", blocking_failure_count)
-    if decision == "READY FOR DEPLOYMENT":
-        st.success(f"Decision: {decision}")
-    elif decision == "CONDITIONAL DEPLOYMENT":
-        st.warning(f"Decision: {decision}")
-    else:
-        st.error(f"Decision: {decision}")
-    st.write(" ".join(reasons))
+    if selected_navigation == "Readiness":
+        st.subheader("Executive dashboard")
+        k1, k2, k3, k4 = st.columns(4)
+        k1.metric("Overall BRI", "N/A" if pd.isna(bri) else f"{bri:.1f}%")
+        k2.metric("Filtered hazards", len(filtered_hazards), f"of {len(hazards)} total")
+        k3.metric(
+            "High + Extreme inherent (filtered)",
+            int(filtered_hazards["risk_category"].isin(["High", "Extreme"]).sum()),
+        )
+        k4.metric("Deployment-blocking failures", blocking_failure_count)
+        if decision == "READY FOR DEPLOYMENT":
+            st.success(f"Decision: {decision}")
+        elif decision == "CONDITIONAL DEPLOYMENT":
+            st.warning(f"Decision: {decision}")
+        else:
+            st.error(f"Decision: {decision}")
+        st.write(" ".join(reasons))
     emit_notification(
         st,
         st.session_state,
@@ -1645,38 +1801,39 @@ def main() -> None:
         "Analysis completed from the current filtered valid dataset.",
         level="success",
     )
-    _render_contextual_explanations(decision)
+    if selected_navigation == "Readiness":
+        _render_contextual_explanations(decision)
 
-    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs(
-        [
-            "Executive dashboard",
-            "Hazard analysis",
-            "Readiness analysis",
-            "Critical-Control Governance",
-            "Requirement–Hazard Mapping",
-            "Data Validation Center",
-            "Data & exports",
-            "Resources and Contact",
-        ]
-    )
-    with tab1:
-        left, right = st.columns(2)
-        left.plotly_chart(bri_gauge(bri), use_container_width=True, key="executive_bri")
-        right.plotly_chart(risk_counts_figure(filtered_hazards), use_container_width=True, key="executive_risk_counts")
-        st.plotly_chart(domain_figure(domains), use_container_width=True, key="executive_domains")
-    with tab2:
+    if selected_navigation == "Hazards":
         st.plotly_chart(heatmap_figure(filtered_hazards), use_container_width=True, key="hazard_heatmap")
         st.caption(
             f"Inherent-risk heat-map cell counts verified: {heatmap_total(filtered_hazards)} cells represent "
             f"{len(filtered_hazards)} filtered valid hazards. Cell numbers are hazard frequencies."
         )
+        hazard_view = filtered_hazards.sort_values("risk_score", ascending=False)
         st.dataframe(
-            filtered_hazards.sort_values("risk_score", ascending=False), use_container_width=True, hide_index=True
+            friendly_frame(
+                hazard_view,
+                columns=["hazard_id", "hazard_name", "likelihood", "consequence", "risk_score", "risk_category"],
+            ),
+            use_container_width=True,
+            hide_index=True,
         )
         st.subheader("Top inherent risks")
-        st.dataframe(filtered_hazards.nlargest(10, "risk_score"), use_container_width=True, hide_index=True)
+        st.dataframe(
+            friendly_frame(
+                filtered_hazards.nlargest(10, "risk_score"),
+                columns=["hazard_id", "hazard_name", "risk_score", "risk_category"],
+            ),
+            use_container_width=True,
+            hide_index=True,
+        )
+        if st.session_state.get("_mobra_display_mode") == "Technical":
+            with st.expander("Technical hazard columns", expanded=False):
+                st.dataframe(hazard_view, use_container_width=True, hide_index=True)
         _render_risk_acceptance(hazards, acceptance_policy)
-    with tab3:
+    if selected_navigation == "Readiness":
+        st.plotly_chart(bri_gauge(bri), use_container_width=True, key="readiness_bri")
         st.plotly_chart(domain_figure(domains), use_container_width=True, key="readiness_domains")
         st.dataframe(domains, use_container_width=True, hide_index=True)
         st.subheader("Legacy input critical-control flags")
@@ -1685,33 +1842,61 @@ def main() -> None:
         )
         critical_flags = requirements["critical_control"].fillna(False).astype(bool)
         st.dataframe(requirements.loc[critical_flags], use_container_width=True, hide_index=True)
-    with tab4:
+    if selected_navigation == "Critical Controls":
         if critical_profile_ready and critical_assessment is not None:
             _render_critical_control_governance(critical_assessment)
         elif critical_assessment is not None:
             st.warning("Critical-control governance is unavailable because the profile has validation errors.")
         else:
             st.info("Upload a critical-control profile to enable structured governance analysis.")
-    with tab5:
+    if selected_navigation == "Mapping":
         if mapping_ready:
             _render_mapping_analysis(mapping, requirements, hazards)
         elif mapping_result is not None:
             st.warning("Mapping analysis is unavailable because the mapping dataset has validation errors.")
         else:
             st.info("Upload a separate mapping CSV/XLSX/XLS file to enable mapping analysis.")
-    with tab6:
+    if selected_navigation == "Validation":
         _render_validation_center(validation_summaries, all_findings, validation_datasets)
-    with tab7:
+    html = ""
+    resources_summary_json = json.dumps(
+        {
+            "bri_pct": None if pd.isna(bri) else round(float(bri), 2),
+            "decision": decision,
+            "hazard_count_total": len(hazards),
+            "requirement_count_total": len(requirements),
+        },
+        indent=2,
+        ensure_ascii=False,
+    ).encode("utf-8")
+    resources_validation_csv = csv_bytes(findings_frame(all_findings))
+    resources_critical_csv = csv_bytes(critical_assessment.data if critical_assessment is not None else pd.DataFrame())
+    resources_mapping_csv = csv_bytes(mapping if mapping_ready else pd.DataFrame())
+    if selected_navigation == "Reports":
         st.subheader("Validated data and quality")
-        st.json(quality)
-        st.dataframe(hazards, use_container_width=True, hide_index=True)
-        st.dataframe(requirements, use_container_width=True, hide_index=True)
-        if profile_validation is not None:
-            st.dataframe(profile_validation.data, use_container_width=True, hide_index=True)
-            if critical_profile_ready and critical_assessment is not None:
-                st.dataframe(critical_assessment.data, use_container_width=True, hide_index=True)
-        if mapping_result is not None:
-            st.dataframe(mapping_result.data, use_container_width=True, hide_index=True)
+        st.metric("Records in report", len(hazards) + len(requirements))
+        st.dataframe(
+            friendly_frame(hazards, columns=["hazard_id", "hazard_name", "risk_score", "risk_category"]),
+            use_container_width=True,
+            hide_index=True,
+        )
+        st.dataframe(
+            friendly_frame(
+                requirements, columns=["requirement_id", "requirement_wording", "observed_score", "maximum_score"]
+            ),
+            use_container_width=True,
+            hide_index=True,
+        )
+        with st.expander("Technical report data and quality details", expanded=False):
+            st.json(quality)
+            st.dataframe(hazards, use_container_width=True, hide_index=True)
+            st.dataframe(requirements, use_container_width=True, hide_index=True)
+            if profile_validation is not None:
+                st.dataframe(profile_validation.data, use_container_width=True, hide_index=True)
+                if critical_profile_ready and critical_assessment is not None:
+                    st.dataframe(critical_assessment.data, use_container_width=True, hide_index=True)
+            if mapping_result is not None:
+                st.dataframe(mapping_result.data, use_container_width=True, hide_index=True)
         mapping_statistics: dict[str, Any] = {
             "available": mapping_ready,
             "mapping_file": mapping_filename,
@@ -1927,15 +2112,15 @@ def main() -> None:
             "MOBRA_Requirements_Template.csv",
             "text/csv",
         )
-    with tab8:
+    if selected_navigation == "Resources":
         _render_resources_and_contact(
             requirements,
             hazards,
             html,
-            json.dumps(summary, indent=2, ensure_ascii=False).encode("utf-8"),
-            csv_bytes(findings_frame(all_findings)),
-            csv_bytes(critical_assessment.data if critical_assessment is not None else pd.DataFrame()),
-            csv_bytes(mapping if mapping_ready else pd.DataFrame()),
+            resources_summary_json,
+            resources_validation_csv,
+            resources_critical_csv,
+            resources_mapping_csv,
         )
 
 
