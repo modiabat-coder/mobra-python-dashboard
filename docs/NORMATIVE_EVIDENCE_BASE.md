@@ -19,3 +19,5 @@ MOBRA exports metadata and official links, not unauthorized document contents. `
 ## Review and non-endorsement
 
 Review the manifest at least before each release and update `last_verified_date`, edition, official URLs, status, and citations. Missing external links must not crash the app. Access to a referenced standard or guidance document does not imply endorsement, certification, accreditation, or validation of MOBRA by the issuing organization. MOBRA does not claim WHO, ISO, CDC, or NIH endorsement.
+
+Educational posters use this catalogue only as a source basis for original high-level summaries. They do not reproduce proprietary clauses, figures, or tables. Supporting literature remains explicitly non-normative.

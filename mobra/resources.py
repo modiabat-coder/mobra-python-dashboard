@@ -161,6 +161,7 @@ def build_open_access_reference_package(resources: Iterable[dict[str, Any]] | No
         archive.writestr(
             "README.txt",
             "MOBRA open-access reference package. Only explicitly permitted local files are included. "
-            f"Files included: {included}. ISO PDFs are never bundled.\n",
+            f"Files included: {included}. ISO PDFs are never bundled.\n"
+            "MOBRA does not claim endorsement, certification, accreditation, or validation by any issuing organization.\n",
         )
     return buffer.getvalue()

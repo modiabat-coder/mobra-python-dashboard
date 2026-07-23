@@ -1024,6 +1024,11 @@ def test_html_report_is_standalone_and_contains_required_sections() -> None:
     assert "R005" in html and "R059" in html
     assert "M095" in html
     assert "plotly" in html.lower()
+    assert "MOBRA_Manuscript.pdf" in html
+    assert "81.0%" in html
+    assert "8dbcf4e3c1017144fbd0f4fb415398f87f5665d8fce4f106b2a18354aaac22f5" in html
+    assert "mobra_logo_horizontal" not in html  # the report embeds the image bytes, not a local path
+    assert "data:image/png;base64," in html
 
 
 def test_streamlit_app_smoke() -> None:

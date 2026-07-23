@@ -16,6 +16,7 @@ from .config import (
     APP_VERSION,
     AUTHOR_EMAIL,
     AUTHOR_NAME,
+    BRANDING_VERSION,
     FULL_DISCLAIMER,
     NORMATIVE_EVIDENCE_WORDING,
     configured_author_email,
@@ -34,7 +35,9 @@ from .critical_controls import (
     validate_critical_control_profile,
 )
 from .decisions import DeploymentPolicy, deployment_decision
+from .educational_media import educational_media_package, load_educational_media
 from .export_contracts import EXCEL_SHEETS, EXPORT_FILENAMES
+from .manuscript import manuscript_download_bytes, manuscript_metadata
 from .mapping import (
     ALLOWED_CONTROL_ROLES,
     ALLOWED_RELATIONSHIP_TYPES,
@@ -61,6 +64,7 @@ from .operational_tools import (
     build_requirements_import_template,
     reset_assessment_state,
     send_email_backup,
+    template_catalogue_csv,
     valid_email,
 )
 from .readiness import calculate_bri, domain_readiness, failed_critical_controls
@@ -95,6 +99,7 @@ __all__ = [
     "ACCEPTANCE_DISPOSITIONS",
     "APP_TITLE",
     "APP_VERSION",
+    "BRANDING_VERSION",
     "AUTHOR_EMAIL",
     "AUTHOR_NAME",
     "configured_author_email",
@@ -165,12 +170,17 @@ __all__ = [
     "build_orl_assessment_workbook",
     "build_orl_pdf",
     "build_requirements_import_template",
+    "educational_media_package",
+    "load_educational_media",
+    "manuscript_download_bytes",
+    "manuscript_metadata",
     "catalogue_csv_bytes",
     "catalogue_xlsx_bytes",
     "load_normative_resources",
     "load_supporting_literature",
     "reset_assessment_state",
     "send_email_backup",
+    "template_catalogue_csv",
     "valid_email",
     "validate_resource_manifest",
 ]

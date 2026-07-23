@@ -7,6 +7,7 @@ the demonstration data or deployment rules.
 
 from __future__ import annotations
 
+import hashlib
 import io
 import os
 import re
@@ -14,6 +15,7 @@ import smtplib
 import zipfile
 from collections.abc import Mapping
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from email.message import EmailMessage
 from pathlib import Path
 
@@ -22,7 +24,7 @@ from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 
-from .config import FULL_DISCLAIMER
+from .config import APP_TITLE, APP_VERSION, FULL_DISCLAIMER
 
 EMAIL_PATTERN = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
 MAX_EMAIL_ATTACHMENT_BYTES = 20 * 1024 * 1024
@@ -64,6 +66,51 @@ SCORING_GUIDANCE = (
     "This scale is provisional and has not completed scientific validation."
 )
 
+TEMPLATE_CATALOGUE = [
+    {
+        "filename": "MOBRA_Printable_ORL_Assessment_Form.xlsx",
+        "format": "XLSX",
+        "status": "Ready for digital entry",
+        "reupload": "Re-upload compatible",
+    },
+    {
+        "filename": "MOBRA_Printable_ORL_Assessment_Form.pdf",
+        "format": "PDF",
+        "status": "Ready for printing",
+        "reupload": "Manual re-entry required",
+    },
+    {
+        "filename": "MOBRA_Requirements_Import_Template.xlsx",
+        "format": "XLSX",
+        "status": "Ready for digital entry",
+        "reupload": "Re-upload compatible",
+    },
+    {
+        "filename": "MOBRA_Printable_Hazard_Register.xlsx",
+        "format": "XLSX",
+        "status": "Ready for digital entry",
+        "reupload": "Manual re-entry required",
+    },
+    {
+        "filename": "MOBRA_Printable_Hazard_Register.pdf",
+        "format": "PDF",
+        "status": "Ready for printing",
+        "reupload": "Manual re-entry required",
+    },
+    {
+        "filename": "MOBRA_Hazard_Import_Template.xlsx",
+        "format": "XLSX",
+        "status": "Ready for digital entry",
+        "reupload": "Re-upload compatible",
+    },
+    {
+        "filename": "MOBRA_Field_Assessment_Package.xlsx",
+        "format": "XLSX",
+        "status": "Ready for digital entry",
+        "reupload": "Re-upload compatible",
+    },
+]
+
 
 def _sample_requirements() -> pd.DataFrame:
     return pd.read_csv(SAMPLE_DIR / "requirements_sample.csv")
@@ -99,7 +146,7 @@ def _instruction_sheet(workbook: Workbook, title: str, lines: list[str]) -> None
     sheet["A1"] = title
     sheet["A1"].font = Font(bold=True, size=14, color="FFFFFF")
     sheet["A1"].fill = PatternFill("solid", fgColor="0B3954")
-    for index, line in enumerate(lines, start=3):
+    for index, line in enumerate([f"Application: {APP_TITLE}", *lines], start=3):
         sheet.cell(row=index, column=1, value=line)
         sheet.cell(row=index, column=1).alignment = Alignment(wrap_text=True, vertical="top")
     sheet.column_dimensions["A"].width = 120
@@ -169,6 +216,7 @@ def build_orl_assessment_workbook(requirements: pd.DataFrame | None = None) -> b
             "Use this blank or pre-populated form to record an assessment manually, then enter the completed values into the supported digital template.",
             SCORING_GUIDANCE,
             "Do not infer Likelihood or Consequence values automatically; qualified assessors must select and document them.",
+            "Template status: Ready for printing. Digital entry is supported through the ORL import template; this form requires manual re-entry.",
             "The form supports structured assessment and does not constitute scientific, clinical, regulatory, operational, or field validation.",
             "Disclaimer: " + FULL_DISCLAIMER,
         ],
@@ -195,7 +243,9 @@ def build_requirements_import_template() -> bytes:
         [
             "Use these exact supported upload columns. Keep requirement IDs unique and use R001–R060 for the demonstration schema.",
             "Observed Score and Maximum Score must be numeric and within the requirement scale; dates should use YYYY-MM-DD.",
+            "Template status: Ready for digital entry and re-upload compatible.",
             "Validation findings are returned in the application and do not silently change source data.",
+            "Template status: Ready for printing. Handwritten entries require manual re-entry.",
             "Disclaimer: " + FULL_DISCLAIMER,
         ],
     )
@@ -239,6 +289,7 @@ def build_hazard_import_template() -> bytes:
         [
             "Use the exact supported upload columns. Likelihood and Consequence must be selected by qualified assessors and are not inferred automatically.",
             "Residual fields are optional; incomplete pairs are reported by validation.",
+            "Template status: Ready for digital entry and re-upload compatible.",
             "Disclaimer: " + FULL_DISCLAIMER,
         ],
     )
@@ -261,7 +312,7 @@ def build_orl_pdf(requirements: pd.DataFrame | None = None) -> bytes:
         for _, row in frame.iterrows()
     )
     lines.extend(["", "Disclaimer:", *FULL_DISCLAIMER.splitlines()])
-    return _simple_pdf(lines, "MOBRA ORL Assessment Form")
+    return _simple_pdf(lines, "MOBRA ORL Assessment Form", repeat_header=lines[7])
 
 
 def build_hazard_pdf(hazards: pd.DataFrame | None = None) -> bytes:
@@ -280,7 +331,7 @@ def build_hazard_pdf(hazards: pd.DataFrame | None = None) -> bytes:
         for _, row in frame.iterrows()
     )
     lines.extend(["", "Disclaimer:", *FULL_DISCLAIMER.splitlines()])
-    return _simple_pdf(lines, "MOBRA Hazard Register")
+    return _simple_pdf(lines, "MOBRA Hazard Register", repeat_header=lines[6])
 
 
 def build_field_assessment_package(
@@ -335,9 +386,20 @@ def _pdf_escape(value: str) -> str:
     return ascii_value.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
 
 
-def _simple_pdf(lines: list[str], title: str, lines_per_page: int = 42) -> bytes:
+def _simple_pdf(
+    lines: list[str],
+    title: str,
+    lines_per_page: int = 42,
+    *,
+    repeat_header: str | None = None,
+) -> bytes:
     """Create a small, readable, dependency-free PDF with repeated page content."""
-    pages = [lines[index : index + lines_per_page] for index in range(0, len(lines), lines_per_page)] or [[title]]
+    chunk_size = max(8, lines_per_page - 3)
+    chunks = [lines[index : index + chunk_size] for index in range(0, len(lines), chunk_size)] or [[title]]
+    pages = [
+        [title, f"Page {page_number} of {len(chunks)}", *([repeat_header] if repeat_header else []), *chunk]
+        for page_number, chunk in enumerate(chunks, start=1)
+    ]
     objects: list[bytes] = []
     objects.append(b"<< /Type /Catalog /Pages 2 0 R >>")
     page_ids = [4 + 2 * index for index in range(len(pages))]
@@ -455,8 +517,9 @@ def send_email_backup(
         message["Cc"] = cc
     message["Subject"] = subject or "MOBRA Application Inquiry"
     message.set_content(
-        f"MOBRA assessment backup: {assessment_name}\n\n"
-        "This message was sent after explicit user consent. Verify institutional authorization and data classification."
+        f"{APP_TITLE} assessment backup: {assessment_name}\n\n"
+        "This message was sent after explicit user consent. Verify institutional authorization and data classification.\n\n"
+        "Passing software checks does not constitute scientific, clinical, operational, regulatory, institutional, or field validation."
     )
     for filename, content in attachments.items():
         message.add_attachment(content, maintype="application", subtype="octet-stream", filename=filename)
@@ -473,14 +536,31 @@ def send_email_backup(
 def build_backup_zip(files: Mapping[str, bytes]) -> bytes:
     """Package only selected derived outputs; uploaded source files are never added implicitly."""
     buffer = io.BytesIO()
+    timestamp = datetime.now(UTC).replace(microsecond=0).isoformat()
+    checksums = {filename: hashlib.sha256(content).hexdigest() for filename, content in files.items()}
+    listing = "\n".join(
+        f"- {filename} ({len(files[filename]):,} bytes, SHA-256 {checksums[filename]})" for filename in files
+    )
     with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as archive:
         archive.writestr(
-            "README.txt", "MOBRA derived assessment backup. Original uploaded source files are excluded by default.\n"
+            "README.txt",
+            f"{APP_TITLE}\n"
+            f"Application version: {APP_VERSION}\n"
+            f"Created (UTC): {timestamp}\n"
+            "MOBRA derived assessment backup. Original uploaded source files are excluded by default.\n"
+            "Included files and integrity checksums:\n"
+            f"{listing}\n\n"
+            "This package contains derived outputs selected by the user; it is not an authorization to deploy.\n",
         )
         archive.writestr("DISCLAIMER.txt", FULL_DISCLAIMER)
         for filename, content in files.items():
             archive.writestr(filename, content)
     return buffer.getvalue()
+
+
+def template_catalogue_csv() -> bytes:
+    """Return a stable manifest for printable and digital templates."""
+    return pd.DataFrame(TEMPLATE_CATALOGUE).to_csv(index=False).encode("utf-8-sig")
 
 
 def reset_assessment_state(session_state: Mapping[str, object]) -> None:

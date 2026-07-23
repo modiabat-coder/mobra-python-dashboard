@@ -17,6 +17,7 @@ from .acceptance import (
     risk_acceptance_summary,
     risk_acceptance_summary_table,
 )
+from .branding import asset_data_uri
 from .charts import bri_gauge, domain_figure, heatmap_figure, risk_counts_figure
 from .config import (
     APP_TITLE,
@@ -25,9 +26,11 @@ from .config import (
     FULL_DISCLAIMER,
     HOW_TO_USE_STEPS,
     INTRODUCTION_COMPONENTS,
+    LIVE_APP_URL,
     NON_ENDORSEMENT_STATEMENT,
     NORMATIVE_EVIDENCE_WORDING,
     PROTOTYPE_STATUS,
+    REPOSITORY_URL,
     WHAT_MOBRA_DOES_NOT_DO,
     build_identifier,
     configured_author_email,
@@ -37,6 +40,7 @@ from .critical_controls import (
     CriticalControlAssessment,
     critical_control_summary_table,
 )
+from .manuscript import manuscript_metadata
 from .mapping import (
     coverage_by_requirement_domain,
     enrich_mapping,
@@ -79,6 +83,8 @@ def make_html_report(
     assessment_metadata: dict[str, Any] | None = None,
     manuscript_available: bool | None = None,
     email_backup_enabled: bool | None = None,
+    manuscript_sha256: str | None = None,
+    manuscript_version_note: str | None = None,
 ) -> str:
     """Build a self-contained HTML report with escaped data tables and inline Plotly."""
     acceptance_policy = risk_acceptance_policy or RiskAcceptancePolicy()
@@ -167,10 +173,11 @@ def make_html_report(
         """<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>MOBRA — Mobile Operational Biosecurity Readiness Assessment Report</title><style>
-body{font-family:Arial,sans-serif;margin:0;background:#f5f7fa;color:#17202a}header{background:#0b3954;color:#fff;padding:28px 5%}main{max-width:1250px;margin:auto;padding:24px}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px}.card{background:#fff;border-radius:12px;padding:18px;box-shadow:0 2px 10px #0001;margin-bottom:18px}.metric{font-size:30px;font-weight:700}.label{color:#5d6d7e}.decision{font-size:22px;font-weight:700}table{border-collapse:collapse;width:100%;font-size:12px;display:block;overflow-x:auto}th,td{border:1px solid #ddd;padding:6px;text-align:left;white-space:nowrap}th{background:#eaf2f8}.plot{overflow-x:auto}.note{color:#5d6d7e;font-size:13px}</style></head>
-<body><header><h1>MOBRA — Mobile Operational Biosecurity Readiness Assessment Report</h1><p>{{ prototype_status }}</p><p>{{ application_definition }}</p></header><main>
+body{font-family:Arial,sans-serif;margin:0;background:#f1f5f9;color:#17202a}header{background:#0b1f3a;color:#fff;padding:28px 5%;display:flex;gap:22px;align-items:center}header img{width:84px;height:84px;object-fit:contain}main{max-width:1250px;margin:auto;padding:24px}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px}.card{background:#fff;border-radius:12px;padding:18px;box-shadow:0 2px 10px #0001;margin-bottom:18px}.metric{font-size:30px;font-weight:700}.label{color:#475569}.decision{font-size:22px;font-weight:700}table{border-collapse:collapse;width:100%;font-size:12px;display:block;overflow-x:auto}th,td{border:1px solid #ddd;padding:6px;text-align:left;white-space:nowrap}th{background:#e0f2fe}.plot{overflow-x:auto}.note{color:#475569;font-size:13px}.brand-link{color:#0b1f3a;font-weight:600}</style></head>
+<body><header>{% if logo_data_uri %}<img src="{{ logo_data_uri }}" alt="MOBRA original shield and mobile laboratory logo">{% endif %}<div><h1>MOBRA — Mobile Operational Biosecurity Readiness Assessment Report</h1><p>{{ prototype_status }}</p><p>{{ application_definition }}</p></div></header><main>
 <div class="card"><h2>Application metadata</h2><p><strong>Application:</strong> {{ application_name }}<br><strong>Version:</strong> {{ application_version }}<br><strong>Author:</strong> {{ author_name }}<br><strong>Build:</strong> {{ build_identifier }}<br><strong>Validation reference date:</strong> {{ validation_reference_date }}</p>{% if assessment_metadata %}<h3>Assessment metadata</h3><ul>{% for key, value in assessment_metadata.items() %}<li><strong>{{ key }}:</strong> {{ value }}</li>{% endfor %}</ul>{% endif %}{% if author_email %}<p><strong>Contact:</strong> <a href="mailto:{{ author_email }}?subject=MOBRA%20Application%20Inquiry">{{ author_email }}</a></p>{% endif %}</div>
 <div class="card"><h2>About MOBRA</h2><p>{{ application_definition }}</p><p>{{ normative_evidence_wording }}</p><p class="note">{{ non_endorsement_statement }}</p></div>
+<div class="card"><h2>Research Manuscript</h2>{% if manuscript_available %}<p><strong>File:</strong> {{ manuscript_filename }}<br><strong>Author:</strong> {{ manuscript_author }}<br><strong>Size:</strong> {{ manuscript_size_bytes }} bytes<br><strong>Pages:</strong> {{ manuscript_page_count }}<br><strong>SHA-256:</strong> {{ manuscript_sha256 }}</p><p>{{ manuscript_version_note }}</p><p class="note">The manuscript contains an earlier illustrative BRI of 81.0%. The current demonstration dataset produces BRI {{ bri_display }}%; these results are intentionally kept separate.</p><a href="docs/MOBRA_Manuscript.pdf">Download MOBRA Research Manuscript</a>{% else %}<p>Manuscript unavailable in this build.</p>{% endif %}</div>
 <div class="card"><h2>How to use this application</h2><ol>{% for step in how_to_use_steps %}<li>{{ step }}</li>{% endfor %}</ol><h2>What MOBRA does not do</h2><ul>{% for item in what_mobra_does_not_do %}<li>Replace {{ item|lower }}</li>{% endfor %}</ul><p><strong>Components:</strong> {{ introduction_components }}</p></div>
 <div class="grid"><div class="card"><div class="label">Overall BRI</div><div class="metric">{{ bri_display }}%</div></div><div class="card"><div class="label">Hazards analyzed</div><div class="metric">{{ hazard_count }}</div></div><div class="card"><div class="label">Unacceptable hazards</div><div class="metric">{{ unacceptable_count }}</div></div><div class="card"><div class="label">Decision</div><div class="decision">{{ decision }}</div></div></div>
 <div class="card"><h2>Analysis metadata</h2><p>Generated: {{ generated }}<br>Hazard file: {{ hazard_filename }} ({{ hazard_rows }} rows × {{ hazard_columns }} columns)<br>Requirements file: {{ requirements_filename }} ({{ requirement_rows }} rows × {{ requirement_columns }} columns)</p></div>
@@ -194,8 +201,15 @@ body{font-family:Arial,sans-serif;margin:0;background:#f5f7fa;color:#17202a}head
 <div class="card"><h2>Hazard register (calculated fields included)</h2>{{ hazards_table }}</div><div class="card"><h2>Operational requirements (calculated fields included)</h2>{{ requirements_table }}</div>
 <div class="card"><h2>Methodology and limitations</h2><p>Risk Score = Likelihood x Consequence. Categories remain Low 1-4, Moderate 5-9, High 10-16, and Extreme 17-25. Inherent risk is calculated from the original likelihood and consequence. Residual risk is used only when valid residual data or a valid calculated residual category is available for that hazard. Under the default missing-residual policy, inherent risk is a screening substitute and is explicitly labeled as such. BRI (%) remains sum of observed requirement scores divided by sum of maximum requirement scores x 100. Critical-control governance is a separate override layer and does not remove low-scoring controls from BRI. Score status, required evidence, and record completeness are assessed independently. Deployment-blocking failures override a high BRI; Conditional gaps and Manual review prevent automatic READY. A READY result does not imply that missing residual assessments were completed. Critical-control classifications and thresholds are provisional rather than universal, regulatory, or institutionally approved. This is external-dataset-based computational verification of the MOBRA prototype, not clinical, operational, regulatory, or field validation. The application does not replace risk acceptance by authorized and accountable institutional personnel.</p></div>
 <div class="card"><h2>Disclaimer and Limitation of Liability</h2><p>{{ full_disclaimer }}</p><p class="note">{{ non_endorsement_statement }}</p></div>
-<p class="note">Generated with UTF-8. Source data are not overwritten; calculated columns are added to the downloaded analysis copies. Manuscript available: {{ manuscript_available }}. Optional email backup enabled: {{ email_backup_enabled }}.</p></main></body></html>"""
+<div class="card"><h2>Links and contact</h2><p><a class="brand-link" href="{{ live_app_url }}">Deployed application</a> · <a class="brand-link" href="{{ repository_url }}">Source repository</a> · {{ author_email }}</p><p class="note">Generated with UTF-8. Source data are not overwritten; calculated columns are added to downloaded analysis copies. Optional email backup enabled: {{ email_backup_enabled }}.</p></div></main></body></html>"""
     )
+    manuscript_info = manuscript_metadata()
+    if manuscript_available is not None:
+        manuscript_info["manuscript_available"] = bool(manuscript_available)
+    if manuscript_sha256 is not None:
+        manuscript_info["manuscript_sha256"] = manuscript_sha256
+    if manuscript_version_note is not None:
+        manuscript_info["manuscript_version_note"] = manuscript_version_note
     domain_plot = domain_figure(domains) if not domains.empty else go.Figure()
     return template.render(
         application_name=escape(APP_TITLE),
@@ -213,8 +227,17 @@ body{font-family:Arial,sans-serif;margin:0;background:#f5f7fa;color:#17202a}head
         normative_evidence_wording=escape(NORMATIVE_EVIDENCE_WORDING),
         non_endorsement_statement=escape(NON_ENDORSEMENT_STATEMENT),
         full_disclaimer=escape(FULL_DISCLAIMER),
+        logo_data_uri=asset_data_uri("mobra_logo_horizontal.png"),
+        live_app_url=escape(LIVE_APP_URL),
+        repository_url=escape(REPOSITORY_URL),
         assessment_metadata={str(key): escape(str(value)) for key, value in (assessment_metadata or {}).items()},
-        manuscript_available=bool(manuscript_available),
+        manuscript_available=bool(manuscript_info["manuscript_available"]),
+        manuscript_filename=escape(str(manuscript_info["manuscript_filename"])),
+        manuscript_author=escape(str(manuscript_info["manuscript_author"])),
+        manuscript_size_bytes=f'{int(manuscript_info["manuscript_size_bytes"]):,}',
+        manuscript_page_count=manuscript_info["manuscript_page_count"] or "Unavailable",
+        manuscript_sha256=escape(str(manuscript_info["manuscript_sha256"])),
+        manuscript_version_note=escape(str(manuscript_info["manuscript_version_note"])),
         email_backup_enabled=bool(email_backup_enabled),
         bri_display="N/A" if pd.isna(bri) else f"{bri:.1f}",
         hazard_count=len(filtered),

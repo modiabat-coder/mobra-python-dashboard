@@ -7,10 +7,21 @@ import subprocess
 from pathlib import Path
 
 APP_TITLE = "MOBRA — Mobile Operational Biosecurity Readiness Assessment"
-APP_VERSION = "0.8.0"
+APP_VERSION = "0.9.0"
+BRANDING_VERSION = "1.0.0"
 AUTHOR_NAME = "Mohammad Ahmad Yousef E'Diabat"
 # The author explicitly approved this public application contact address.
 AUTHOR_EMAIL = "modiabat@gmail.com"
+REPOSITORY_URL = "https://github.com/modiabat-coder/mobra-python-dashboard"
+LIVE_APP_URL = "https://mobra-biosecurity-lab.streamlit.app/"
+MANUSCRIPT_FILENAME = "MOBRA_Manuscript.pdf"
+MANUSCRIPT_SHA256 = "8dbcf4e3c1017144fbd0f4fb415398f87f5665d8fce4f106b2a18354aaac22f5"
+MANUSCRIPT_VERSION_NOTE = (
+    "The manuscript documents the research framework and an earlier synthetic demonstration. The deployed "
+    "application has subsequently undergone additional software development, governance refinement, "
+    "validation-rule expansion, and interface updates. Numerical demonstration outputs in the manuscript "
+    "may therefore differ from the current application."
+)
 DISCLAIMER_VERSION = "1.0"
 PROTOTYPE_STATUS = "Experimental research and decision-support prototype"
 LAST_UPDATE_DATE = "2026-07-23"
@@ -80,7 +91,7 @@ FULL_DISCLAIMER = (
     "other outcomes arising from use of, inability to use, or reliance on the application or its outputs.\n\n"
     "Users are responsible for protecting confidential, personal, security-sensitive, and laboratory information "
     "and for ensuring that uploading, downloading, storing, emailing, or sharing assessment data is authorized "
-    "and lawful. Final legal wording should be reviewed by qualified legal counsel."
+    "and lawful. Final legal wording should be reviewed by qualified legal counsel before institutional deployment."
 )
 
 
@@ -112,11 +123,21 @@ def application_metadata(*, assessment_metadata: dict[str, object] | None = None
     return {
         "application_name": APP_TITLE,
         "application_version": APP_VERSION,
+        "branding_version": BRANDING_VERSION,
         "author_name": AUTHOR_NAME,
+        "author_email": configured_author_email(),
         "author_email_configured": bool(configured_author_email()),
+        "contact_enabled": bool(configured_author_email()),
+        "repository_url": REPOSITORY_URL,
+        "live_app_url": LIVE_APP_URL,
         "disclaimer_version": DISCLAIMER_VERSION,
-        "manuscript_available": (Path(__file__).resolve().parent.parent / "docs" / "MOBRA_Manuscript.pdf").exists(),
+        "manuscript_available": (Path(__file__).resolve().parent.parent / "docs" / MANUSCRIPT_FILENAME).exists(),
+        "manuscript_filename": MANUSCRIPT_FILENAME,
+        "manuscript_sha256": MANUSCRIPT_SHA256,
+        "manuscript_version_note": MANUSCRIPT_VERSION_NOTE,
+        "manuscript_download_enabled": (Path(__file__).resolve().parent.parent / "docs" / MANUSCRIPT_FILENAME).exists(),
         "email_backup_enabled": bool(os.getenv("MOBRA_EMAIL_ENABLED", "").lower() in {"1", "true", "yes", "on"}),
+        "notification_system_enabled": True,
         "prototype_status": PROTOTYPE_STATUS,
         "build_identifier": build_identifier(),
         "last_update_date": LAST_UPDATE_DATE,

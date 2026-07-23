@@ -6,6 +6,7 @@ coverage.xml
 htmlcov/
 .hypothesis/
 .ruff_cache/
+tmp/
 *.pyc
 .DS_Store
 .streamlit/secrets.toml
