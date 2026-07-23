@@ -8,12 +8,26 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
+from mobra.config import (
+    DECISION_CONDITIONAL,
+    DECISION_DO_NOT_DEPLOY,
+    DECISION_LABELS,
+    DECISION_READY,
+    count_phrase,
+)
 from mobra.decisions import deployment_decision
-from mobra.io import list_excel_sheets, read_data_file
+from mobra.charts import heatmap_figure
+from mobra.io import list_excel_sheets, read_data_file, read_json_collections
 from mobra.readiness import calculate_bri, domain_readiness, failed_critical_controls
-from mobra.reporting import make_html_report
+from mobra.reporting import make_excel_workbook, make_html_report
 from mobra.risk import assert_heatmap_total, classify_risk, heatmap_counts, heatmap_total
-from mobra.validation import validate_hazards, validate_requirements
+from mobra.validation import (
+    suggest_column_mapping,
+    validate_hazards,
+    validate_requirements,
+)
+from ui.components import metric_grid_html
+from ui.layout import PAGE_ORDER
 
 
 ROOT = Path(__file__).parents[1]
@@ -124,9 +138,73 @@ def test_extreme_residual_risk_override() -> None:
 def test_decision_thresholds_without_overrides() -> None:
     hazards = validate_hazards(pd.DataFrame({"hazard": ["x"], "likelihood": [1], "consequence": [1]})).data
     req = validate_requirements(pd.DataFrame({"requirement": ["ok"], "observed_score": [5], "maximum_score": [5]})).data
-    assert deployment_decision(hazards, req, 60)[0] == "DEPLOYMENT NOT RECOMMENDED"
-    assert deployment_decision(hazards, req, 75)[0] == "CONDITIONAL DEPLOYMENT"
-    assert deployment_decision(hazards, req, 90)[0] == "READY FOR DEPLOYMENT"
+    assert deployment_decision(hazards, req, 60)[0] == DECISION_DO_NOT_DEPLOY
+    assert deployment_decision(hazards, req, 75)[0] == DECISION_CONDITIONAL
+    assert deployment_decision(hazards, req, 90)[0] == DECISION_READY
+
+
+def test_decision_labels_are_exact_and_centralized() -> None:
+    assert DECISION_LABELS == (
+        "DO NOT DEPLOY",
+        "CONDITIONAL DEPLOYMENT",
+        "READY TO DEPLOY",
+    )
+
+
+@pytest.mark.parametrize(
+    ("count", "expected"),
+    [
+        (0, "0 hazards"),
+        (1, "1 hazard"),
+        (2, "2 hazards"),
+        (1, "1 critical control"),
+        (11, "11 critical controls"),
+    ],
+)
+def test_count_phrase_uses_real_grammar(count: int, expected: str) -> None:
+    noun = "critical control" if "control" in expected else "hazard"
+    assert count_phrase(count, noun) == expected
+
+
+def test_demonstration_safety_invariants() -> None:
+    hazards = validate_hazards(
+        pd.read_csv(ROOT / "sample_data" / "hazards_sample.csv")
+    ).data
+    requirements = validate_requirements(
+        pd.read_csv(ROOT / "sample_data" / "requirements_sample.csv")
+    ).data
+    bri = calculate_bri(requirements)
+    decision, reasons = deployment_decision(hazards, requirements, bri)
+    assert len(hazards) == 24
+    assert bri == pytest.approx(86.7, abs=0.05)
+    assert len(failed_critical_controls(requirements)) == 11
+    assert decision == DECISION_DO_NOT_DEPLOY
+    assert any("11 critical controls" in reason for reason in reasons)
+
+
+def test_high_risk_requires_defined_action_for_conditional_deployment() -> None:
+    hazards = validate_hazards(
+        pd.DataFrame(
+            {
+                "hazard": ["x"],
+                "likelihood": [3],
+                "consequence": [4],
+                "corrective_action": ["Complete containment review"],
+            }
+        )
+    ).data
+    req = validate_requirements(
+        pd.DataFrame(
+            {
+                "requirement": ["ok"],
+                "observed_score": [5],
+                "maximum_score": [5],
+            }
+        )
+    ).data
+    assert deployment_decision(hazards, req, 90)[0] == "CONDITIONAL DEPLOYMENT"
+    hazards["corrective_action"] = "Not provided"
+    assert deployment_decision(hazards, req, 90)[0] == "DO NOT DEPLOY"
 
 
 def test_csv_and_xlsx_readers_and_sheet_selection() -> None:
@@ -141,6 +219,84 @@ def test_csv_and_xlsx_readers_and_sheet_selection() -> None:
     assert read_data_file(payload, name="x.xlsx", sheet_name="Second").iloc[0, 0] == 2
 
 
+def test_json_import_supports_nested_and_flattened_records() -> None:
+    payload = b'{"metadata":{"source":"test"},"records":[{"hazard":"x","likelihood":1,"consequence":2,"owner":{"name":"A"}}]}'
+    collections = read_json_collections(payload)
+    assert "records" in collections
+    assert collections["records"].loc[0, "owner.name"] == "A"
+    frame = read_data_file(payload, name="x.json")
+    assert frame.loc[0, "hazard"] == "x"
+
+
+def test_empty_and_duplicate_header_files_are_rejected() -> None:
+    with pytest.raises(ValueError, match="empty"):
+        read_data_file(b"", name="empty.csv")
+    with pytest.raises(ValueError, match="duplicate column"):
+        read_data_file(
+            b"hazard,likelihood,Likelihood,consequence\nx,1,1,2\n",
+            name="duplicate.csv",
+        )
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [b"", b"{bad json", b'{"values":[1,2,3]}'],
+)
+def test_invalid_json_structures_have_clear_errors(payload: bytes) -> None:
+    with pytest.raises(ValueError):
+        read_data_file(payload, name="x.json")
+
+
+def test_xls_reader_selects_legacy_xlrd_engine(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_read_excel(*args: object, **kwargs: object) -> pd.DataFrame:
+        captured.update(kwargs)
+        return pd.DataFrame({"a": [1]})
+
+    monkeypatch.setattr(pd, "read_excel", fake_read_excel)
+    result = read_data_file(b"legacy-xls-placeholder", name="x.xls")
+    assert len(result) == 1
+    assert captured["engine"] == "xlrd"
+
+
+def test_column_mapping_reports_confidence_and_missing_required_fields() -> None:
+    frame = pd.DataFrame(
+        {"Hazard Name": ["x"], "Probability": [2], "Severity": [3]}
+    )
+    mapping = suggest_column_mapping(frame, "hazards").set_index("standard_field")
+    assert mapping.loc["hazard", "mapping_status"] == "Matched"
+    assert mapping.loc["likelihood", "confidence_pct"] == 90
+    missing = suggest_column_mapping(
+        pd.DataFrame({"Hazard": ["x"]}),
+        "hazards",
+    ).set_index("standard_field")
+    assert missing.loc["consequence", "mapping_status"] == "Missing"
+
+
+def test_heatmap_axes_tooltips_and_record_names_are_consistent() -> None:
+    hazards = validate_hazards(
+        pd.DataFrame(
+            {
+                "hazard_id": ["H1"],
+                "hazard": ["Named hazard"],
+                "likelihood": [4],
+                "consequence": [5],
+            }
+        )
+    ).data
+    figure = heatmap_figure(hazards)
+    heatmap = figure.data[0]
+    assert list(heatmap.x) == [1, 2, 3, 4, 5]
+    assert list(heatmap.y) == [5, 4, 3, 2, 1]
+    assert figure.layout.xaxis.title.text == "Consequence"
+    assert figure.layout.yaxis.title.text == "Likelihood"
+    assert "Risk Score" in heatmap.hovertemplate
+    assert "Hazard Count" in heatmap.hovertemplate
+    assert "Named hazard" in str(heatmap.customdata)
+    assert "No hazards assigned" in str(heatmap.customdata)
+
+
 def test_html_report_is_standalone_and_contains_required_sections() -> None:
     hazards = validate_hazards(pd.read_csv(ROOT / "sample_data" / "hazards_sample.csv")).data
     req = validate_requirements(pd.read_csv(ROOT / "sample_data" / "requirements_sample.csv")).data
@@ -149,8 +305,77 @@ def test_html_report_is_standalone_and_contains_required_sections() -> None:
     html = make_html_report(hazards, req, bri, decision, reasons)
     assert html.startswith("<!doctype html>")
     assert "MOBRA Assessment Report" in html
-    assert "Critical-control failures" in html
+    assert "Critical-control Findings" in html
     assert "plotly" in html.lower()
+    assert "Synthetic Demonstration Data" in html
+    assert '<header class="report-header">' in html
+    assert '<div class="report-kpi-grid">' in html
+    assert "@page{size:A4" in html
+    assert "@media(max-width:900px)" in html
+    assert "@media(max-width:560px)" in html
+    assert '<div class="table-wrap">' in html
+    assert (
+        "Cell color represents the MOBRA risk category based on Likelihood × Consequence."
+        in html
+    )
+    assert "X-axis = Consequence" not in html  # Semantics are expressed in the chart itself.
+    assert "Likelihood" in html and "Consequence" in html
+
+
+def test_metric_grid_has_responsive_structure() -> None:
+    html = metric_grid_html(
+        [
+            ("Overall BRI", "86.7%", "Weighted readiness"),
+            ("Hazards", 24, "Structurally valid imported records"),
+            ("Failed Critical Controls", 11, "Non-bypassable override"),
+            ("Decision", DECISION_DO_NOT_DEPLOY, "Final rule output"),
+        ]
+    )
+    assert html.startswith('<div class="mobra-metric-grid"')
+    assert html.count('class="mobra-metric-card"') == 4
+    assert "--metric-columns:4" in html
+
+
+def test_navigation_has_exactly_twelve_pages() -> None:
+    assert len(PAGE_ORDER) == 12
+    assert len(set(PAGE_ORDER)) == 12
+
+
+def test_user_facing_sources_have_no_retired_labels_or_placeholder_grammar() -> None:
+    paths = [
+        *sorted((ROOT / "mobra").glob("*.py")),
+        *sorted((ROOT / "ui").glob("*.py")),
+        ROOT / "README.md",
+        ROOT / "TECHNICAL_REVIEW.md",
+    ]
+    text = "\n".join(path.read_text(encoding="utf-8") for path in paths)
+    retired = "READY " + "/" + " DEPLOY"
+    placeholder = "Control" + "(s)"
+    assert retired not in text
+    assert placeholder not in text
+
+
+def test_excel_report_contains_required_worksheets() -> None:
+    hazards = validate_hazards(
+        pd.read_csv(ROOT / "sample_data" / "hazards_sample.csv")
+    ).data
+    req = validate_requirements(
+        pd.read_csv(ROOT / "sample_data" / "requirements_sample.csv")
+    ).data
+    bri = calculate_bri(req)
+    decision, reasons = deployment_decision(hazards, req, bri)
+    workbook = make_excel_workbook(hazards, req, bri, decision, reasons)
+    sheets = pd.ExcelFile(BytesIO(workbook), engine="openpyxl").sheet_names
+    assert sheets == [
+        "Executive Summary",
+        "Domain Summary",
+        "Requirements",
+        "Hazard Register",
+        "Risk Matrix",
+        "Critical Controls",
+        "Corrective Actions",
+        "Validation Issues",
+    ]
 
 
 def test_streamlit_app_smoke() -> None:
@@ -160,4 +385,30 @@ def test_streamlit_app_smoke() -> None:
     app = AppTest.from_file(str(ROOT / "app.py"))
     app.run(timeout=30)
     assert not app.exception
-    assert app.title[0].value.endswith("MOBRA Dashboard")
+    assert app.selectbox[0].label == "Navigation"
+    assert app.selectbox[0].value == "Home"
+
+
+def test_every_application_page_smoke() -> None:
+    """Run every navigation target with the synthetic dataset."""
+    from streamlit.testing.v1 import AppTest
+
+    pages = [
+        "Home",
+        "Data Import",
+        "Data Validation",
+        "Requirements Assessment",
+        "Hazard Register",
+        "Risk Analysis",
+        "Readiness Dashboard",
+        "Deployment Decision",
+        "Corrective Actions",
+        "Reports and Export",
+        "Methodology",
+        "About MOBRA",
+    ]
+    for page in pages:
+        app = AppTest.from_file(str(ROOT / "app.py"))
+        app.session_state["active_page"] = page
+        app.run(timeout=60)
+        assert not app.exception, page

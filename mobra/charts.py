@@ -1,4 +1,4 @@
-"""Plotly visualizations used by the dashboard and report."""
+"""Consistent Plotly visualizations for the MOBRA interface and reports."""
 
 from __future__ import annotations
 
@@ -7,34 +7,390 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 
-from .risk import RISK_COLORS, RISK_LEVELS, heatmap_counts
+from .config import (
+    ACCENT_COLOR,
+    BORDER_COLOR,
+    MUTED_TEXT_COLOR,
+    PRIMARY_COLOR,
+    RISK_COLORS,
+    RISK_LEVELS,
+    RISK_TEXT_COLORS,
+    SECONDARY_COLOR,
+    SURFACE_COLOR,
+    TEXT_COLOR,
+)
+from .risk import classify_risk, heatmap_counts
+
+
+def apply_chart_theme(
+    figure: go.Figure,
+    *,
+    height: int = 380,
+    title: str | None = None,
+) -> go.Figure:
+    """Apply the shared MOBRA chart typography, spacing, and background."""
+    figure.update_layout(
+        title=title,
+        title_font={"size": 18, "color": PRIMARY_COLOR, "family": "Inter, Segoe UI, Arial"},
+        font={"size": 12, "color": TEXT_COLOR, "family": "Inter, Segoe UI, Arial"},
+        paper_bgcolor=SURFACE_COLOR,
+        plot_bgcolor=SURFACE_COLOR,
+        height=height,
+        margin={"l": 48, "r": 24, "t": 62 if title else 28, "b": 48},
+        hoverlabel={"bgcolor": PRIMARY_COLOR, "font_color": "#FFFFFF"},
+        legend={
+            "title": None,
+            "orientation": "h",
+            "yanchor": "bottom",
+            "y": 1.01,
+            "xanchor": "right",
+            "x": 1,
+        },
+    )
+    figure.update_xaxes(
+        showgrid=False,
+        linecolor=BORDER_COLOR,
+        tickfont={"color": MUTED_TEXT_COLOR},
+        automargin=True,
+    )
+    figure.update_yaxes(
+        gridcolor="#EAF0F2",
+        linecolor=BORDER_COLOR,
+        tickfont={"color": MUTED_TEXT_COLOR},
+        automargin=True,
+    )
+    return figure
 
 
 def risk_counts_figure(hazards: pd.DataFrame) -> go.Figure:
-    counts = hazards.get("risk_category", pd.Series(dtype=str)).value_counts().reindex(RISK_LEVELS, fill_value=0).reset_index()
-    counts.columns = ["risk_category", "count"]
-    fig = px.bar(counts, x="risk_category", y="count", color="risk_category", text_auto=True, category_orders={"risk_category": RISK_LEVELS}, color_discrete_map=RISK_COLORS, title="Hazards by Risk Category")
-    fig.update_layout(showlegend=False, xaxis_title="Risk category", yaxis_title="Hazard count")
-    return fig
+    """Show hazard counts by fixed risk category."""
+    counts = (
+        hazards.get("risk_category", pd.Series(dtype=str))
+        .value_counts()
+        .reindex(RISK_LEVELS, fill_value=0)
+        .rename_axis("risk_category")
+        .reset_index(name="count")
+    )
+    figure = px.bar(
+        counts,
+        x="risk_category",
+        y="count",
+        color="risk_category",
+        text="count",
+        category_orders={"risk_category": RISK_LEVELS},
+        color_discrete_map=RISK_COLORS,
+        labels={"risk_category": "Risk Category", "count": "Hazard Count"},
+    )
+    figure.update_traces(
+        textposition="outside",
+        cliponaxis=False,
+        hovertemplate="<b>%{x}</b><br>Hazards: %{y}<extra></extra>",
+    )
+    figure.update_layout(showlegend=False)
+    return apply_chart_theme(figure, title="Risk Category Distribution")
 
 
-def heatmap_figure(hazards: pd.DataFrame, title: str = "5 × 5 Hazard Risk Heat Map") -> go.Figure:
+def initial_residual_figure(hazards: pd.DataFrame) -> go.Figure:
+    """Compare initial and residual category counts when residual data exist."""
+    frames: list[pd.DataFrame] = []
+    for column, label in (
+        ("risk_category", "Initial Risk"),
+        ("residual_risk_category", "Residual Risk"),
+    ):
+        if column not in hazards.columns:
+            continue
+        series = hazards[column]
+        series = series[series.isin(RISK_LEVELS)]
+        if series.empty and label == "Residual Risk":
+            continue
+        counts = (
+            series.value_counts()
+            .reindex(RISK_LEVELS, fill_value=0)
+            .rename_axis("risk_category")
+            .reset_index(name="count")
+        )
+        counts["assessment_stage"] = label
+        frames.append(counts)
+    data = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame(
+        columns=["risk_category", "count", "assessment_stage"]
+    )
+    figure = px.bar(
+        data,
+        x="risk_category",
+        y="count",
+        color="assessment_stage",
+        barmode="group",
+        text="count",
+        category_orders={"risk_category": RISK_LEVELS},
+        color_discrete_map={
+            "Initial Risk": PRIMARY_COLOR,
+            "Residual Risk": ACCENT_COLOR,
+        },
+        labels={
+            "risk_category": "Risk Category",
+            "count": "Hazard Count",
+            "assessment_stage": "Assessment Stage",
+        },
+    )
+    figure.update_traces(textposition="outside", cliponaxis=False)
+    return apply_chart_theme(figure, title="Initial versus Residual Risk")
+
+
+def hazards_by_domain_figure(hazards: pd.DataFrame) -> go.Figure:
+    """Show hazard volume by operational domain."""
+    counts = (
+        hazards.get("domain", pd.Series(dtype="string"))
+        .replace("Not provided", pd.NA)
+        .dropna()
+        .value_counts()
+        .head(12)
+        .sort_values()
+        .rename_axis("domain")
+        .reset_index(name="count")
+    )
+    figure = px.bar(
+        counts,
+        x="count",
+        y="domain",
+        orientation="h",
+        text="count",
+        color_discrete_sequence=[SECONDARY_COLOR],
+        labels={"domain": "Operational Domain", "count": "Hazard Count"},
+    )
+    figure.update_traces(
+        textposition="outside",
+        cliponaxis=False,
+        hovertemplate="<b>%{y}</b><br>Hazards: %{x}<extra></extra>",
+    )
+    return apply_chart_theme(figure, title="Hazards by Domain", height=420)
+
+
+def top_hazards_figure(hazards: pd.DataFrame, limit: int = 10) -> go.Figure:
+    """Show the highest scored hazards in descending priority."""
+    if hazards.empty or "risk_score" not in hazards.columns:
+        return go.Figure()
+    data = hazards.nlargest(limit, "risk_score").sort_values("risk_score")
+    name_column = "hazard" if "hazard" in data.columns else "hazard_id"
+    figure = px.bar(
+        data,
+        x="risk_score",
+        y=name_column,
+        orientation="h",
+        color="risk_category",
+        text="risk_score",
+        color_discrete_map=RISK_COLORS,
+        category_orders={"risk_category": RISK_LEVELS},
+        labels={name_column: "Hazard", "risk_score": "Risk Score"},
+    )
+    figure.update_traces(
+        textposition="outside",
+        cliponaxis=False,
+        hovertemplate="<b>%{y}</b><br>Risk score: %{x}<extra></extra>",
+    )
+    figure.update_layout(showlegend=False)
+    return apply_chart_theme(figure, title="Top High-Risk Hazards", height=440)
+
+
+def _risk_colorscale() -> list[list[float | str]]:
+    """Build discrete threshold stops across a 1–25 continuous heatmap scale."""
+    # Plotly normalizes z using (score - 1) / 24.
+    boundaries = [
+        (1, 4.499, RISK_COLORS["Low"]),
+        (4.5, 9.499, RISK_COLORS["Moderate"]),
+        (9.5, 16.499, RISK_COLORS["High"]),
+        (16.5, 25, RISK_COLORS["Extreme"]),
+    ]
+    stops: list[list[float | str]] = []
+    for start, end, color in boundaries:
+        stops.append([max(0, (start - 1) / 24), color])
+        stops.append([min(1, (end - 1) / 24), color])
+    return stops
+
+
+def heatmap_figure(
+    hazards: pd.DataFrame,
+    title: str = "5 × 5 Hazard Risk Matrix",
+) -> go.Figure:
+    """Render the approved consequence × likelihood matrix using real counts."""
+    likelihood_values = [5, 4, 3, 2, 1]
+    consequence_values = [1, 2, 3, 4, 5]
     counts = heatmap_counts(hazards)
-    score_matrix = np.array([[likelihood * consequence for likelihood in range(1, 6)] for consequence in [5, 4, 3, 2, 1]])
-    colorscale = [[0.0, RISK_COLORS["Low"]], [4 / 25, RISK_COLORS["Low"]], [4.01 / 25, RISK_COLORS["Moderate"]], [9 / 25, RISK_COLORS["Moderate"]], [9.01 / 25, RISK_COLORS["High"]], [16 / 25, RISK_COLORS["High"]], [16.01 / 25, RISK_COLORS["Extreme"]], [1.0, RISK_COLORS["Extreme"]]]
-    fig = go.Figure(go.Heatmap(z=score_matrix, x=[1, 2, 3, 4, 5], y=[5, 4, 3, 2, 1], text=counts.to_numpy(), texttemplate="<b>%{text}</b>", textfont={"size": 18, "color": "white"}, colorscale=colorscale, zmin=1, zmax=25, showscale=False, hovertemplate="Likelihood (L)=%{x}<br>Consequence (C)=%{y}<br>Hazard count=%{text}<extra></extra>"))
-    fig.update_layout(title=title, xaxis_title="Likelihood (L) — probability of occurrence", yaxis_title="Consequence (C) — severity of impact", height=540, margin={"l": 55, "r": 30, "t": 70, "b": 70})
-    return fig
+    scores = np.array(
+        [
+            [likelihood * consequence for consequence in consequence_values]
+            for likelihood in likelihood_values
+        ]
+    )
+    categories = np.vectorize(classify_risk)(scores)
+    cell_records = np.empty((5, 5), dtype=object)
+    for row_index, likelihood in enumerate(likelihood_values):
+        for column_index, consequence in enumerate(consequence_values):
+            assigned = hazards[
+                hazards["likelihood"].eq(likelihood)
+                & hazards["consequence"].eq(consequence)
+            ]
+            labels: list[str] = []
+            for _, row in assigned.head(6).iterrows():
+                identifier = row.get("hazard_id", "")
+                name = row.get("hazard", "")
+                labels.append(
+                    f"{identifier}: {name}".strip(": ")
+                    or "Unnamed hazard"
+                )
+            if len(assigned) > 6:
+                labels.append(f"+{len(assigned) - 6} more")
+            cell_records[row_index, column_index] = (
+                "<br>".join(labels) if labels else "No hazards assigned"
+            )
+    custom = np.empty((5, 5, 3), dtype=object)
+    custom[:, :, 0] = categories
+    custom[:, :, 1] = counts.to_numpy()
+    custom[:, :, 2] = cell_records
+    figure = go.Figure(
+        go.Heatmap(
+            z=scores,
+            x=consequence_values,
+            y=likelihood_values,
+            customdata=custom,
+            colorscale=_risk_colorscale(),
+            zmin=1,
+            zmax=25,
+            showscale=False,
+            hovertemplate=(
+                "<b>Risk matrix cell</b><br>"
+                "Likelihood: %{y}<br>"
+                "Consequence: %{x}<br>"
+                "Risk Score: %{z}<br>"
+                "Risk Category: %{customdata[0]}<br>"
+                "Hazard Count: %{customdata[1]}<br>"
+                "Assigned Records:<br>%{customdata[2]}<extra></extra>"
+            ),
+        )
+    )
+    for row_index, likelihood in enumerate(likelihood_values):
+        for column_index, consequence in enumerate(consequence_values):
+            category = str(categories[row_index, column_index])
+            figure.add_annotation(
+                x=consequence,
+                y=likelihood,
+                text=f"<b>{int(counts.iloc[row_index, column_index])}</b>",
+                showarrow=False,
+                font={
+                    "size": 18,
+                    "color": RISK_TEXT_COLORS.get(category, "#FFFFFF"),
+                },
+            )
+    for category in RISK_LEVELS:
+        figure.add_trace(
+            go.Scatter(
+                x=[None],
+                y=[None],
+                mode="markers",
+                marker={"size": 10, "color": RISK_COLORS[category], "symbol": "square"},
+                name=category,
+                hoverinfo="skip",
+            )
+        )
+    figure.update_xaxes(
+        title="Consequence",
+        tickmode="array",
+        tickvals=consequence_values,
+        range=[0.5, 5.5],
+        fixedrange=True,
+    )
+    figure.update_yaxes(
+        title="Likelihood",
+        tickmode="array",
+        tickvals=[1, 2, 3, 4, 5],
+        range=[0.5, 5.5],
+        fixedrange=True,
+    )
+    return apply_chart_theme(figure, title=title, height=560)
+
+
+def bri_progress_figure(bri: float) -> go.Figure:
+    """Render Overall BRI as a compact horizontal progress indicator."""
+    value = 0.0 if pd.isna(bri) else float(bri)
+    display = "N/A" if pd.isna(bri) else f"{value:.1f}%"
+    figure = go.Figure(
+        go.Indicator(
+            mode="number+gauge",
+            value=value,
+            number={"suffix": "%", "font": {"size": 34, "color": PRIMARY_COLOR}},
+            title={"text": "Overall BRI", "font": {"size": 16, "color": MUTED_TEXT_COLOR}},
+            gauge={
+                "shape": "bullet",
+                "axis": {"range": [0, 100], "tickvals": [0, 50, 70, 85, 100]},
+                "bar": {"color": SECONDARY_COLOR, "thickness": 0.55},
+                "bgcolor": "#E8EFF1",
+                "borderwidth": 0,
+                "threshold": {
+                    "line": {"color": PRIMARY_COLOR, "width": 3},
+                    "value": 85,
+                },
+            },
+        )
+    )
+    figure.update_layout(
+        annotations=[
+            {
+                "text": display,
+                "x": 0.98,
+                "y": 0.95,
+                "xref": "paper",
+                "yref": "paper",
+                "showarrow": False,
+                "font": {"color": PRIMARY_COLOR, "size": 1},
+            }
+        ]
+    )
+    return apply_chart_theme(figure, height=220)
 
 
 def bri_gauge(bri: float) -> go.Figure:
-    value = 0 if pd.isna(bri) else float(bri)
-    fig = go.Figure(go.Indicator(mode="gauge+number", value=value, number={"suffix": "%", "font": {"size": 42}}, title={"text": "Biosecurity Readiness Index (BRI)"}, gauge={"axis": {"range": [0, 100]}, "steps": [{"range": [0, 50], "color": "#ffcdd2"}, {"range": [50, 70], "color": "#ffe0b2"}, {"range": [70, 85], "color": "#fff9c4"}, {"range": [85, 100], "color": "#c8e6c9"}], "threshold": {"line": {"color": "black", "width": 4}, "value": 70}}))
-    fig.update_layout(height=320, margin={"l": 30, "r": 30, "t": 70, "b": 20})
-    return fig
+    """Backward-compatible alias for the compact BRI indicator."""
+    return bri_progress_figure(bri)
 
 
 def domain_figure(domains: pd.DataFrame) -> go.Figure:
-    fig = px.bar(domains, x="readiness_pct", y="domain", orientation="h", text_auto=".1f", range_x=[0, 100], title="Readiness by Operational Domain")
-    fig.update_layout(xaxis_title="Domain BRI (%)", yaxis_title="Operational domain")
-    return fig
+    """Show weighted readiness for each available operational domain."""
+    data = domains.sort_values("readiness_pct", ascending=True)
+    figure = px.bar(
+        data,
+        x="readiness_pct",
+        y="domain",
+        orientation="h",
+        text="readiness_pct",
+        range_x=[0, 100],
+        color_discrete_sequence=[SECONDARY_COLOR],
+        labels={"readiness_pct": "Domain Readiness (%)", "domain": "Operational Domain"},
+    )
+    figure.update_traces(
+        texttemplate="%{text:.1f}%",
+        textposition="outside",
+        cliponaxis=False,
+        hovertemplate="<b>%{y}</b><br>Readiness: %{x:.1f}%<extra></extra>",
+    )
+    height = max(360, min(760, 170 + 22 * len(data)))
+    return apply_chart_theme(figure, title="Domain Readiness Overview", height=height)
+
+
+def action_status_figure(actions: pd.DataFrame) -> go.Figure:
+    """Show corrective-action status counts when action records exist."""
+    counts = (
+        actions.get("status", pd.Series(dtype="string"))
+        .fillna("Not specified")
+        .value_counts()
+        .rename_axis("status")
+        .reset_index(name="count")
+    )
+    figure = px.bar(
+        counts,
+        x="status",
+        y="count",
+        text="count",
+        color_discrete_sequence=[SECONDARY_COLOR],
+        labels={"status": "Action Status", "count": "Actions"},
+    )
+    figure.update_traces(textposition="outside", cliponaxis=False)
+    return apply_chart_theme(figure, title="Corrective Action Status")

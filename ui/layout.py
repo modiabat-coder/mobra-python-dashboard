@@ -1,0 +1,122 @@
+"""Application shell and sidebar navigation for MOBRA."""
+
+from __future__ import annotations
+
+from datetime import datetime
+from html import escape
+
+import pandas as pd
+import streamlit as st
+
+from mobra.config import (
+    APP_NAME,
+    LOGO_DARK_PATH,
+    count_phrase,
+)
+from mobra.validation import ValidationResult
+
+
+PAGE_GROUPS = {
+    "Overview": ["Home"],
+    "Data": ["Data Import", "Data Validation"],
+    "Assessment": ["Requirements Assessment", "Hazard Register"],
+    "Analysis": ["Risk Analysis", "Readiness Dashboard"],
+    "Decision": ["Deployment Decision", "Corrective Actions"],
+    "Reporting": ["Reports and Export"],
+    "System Information": ["Methodology", "About MOBRA"],
+}
+PAGE_ICONS = {
+    "Home": "\u2302",
+    "Data Import": "\u21e7",
+    "Data Validation": "\u2713",
+    "Requirements Assessment": "\u25a4",
+    "Hazard Register": "\u26a0",
+    "Risk Analysis": "\u25a6",
+    "Readiness Dashboard": "\u25d4",
+    "Deployment Decision": "\u25c6",
+    "Corrective Actions": "\u21bb",
+    "Reports and Export": "\u21e9",
+    "Methodology": "\u2211",
+    "About MOBRA": "\u24d8",
+}
+PAGE_LABELS = {
+    "Home": "Overview",
+    "Data Import": "Data Import",
+    "Data Validation": "Data Validation",
+    "Requirements Assessment": "Requirements",
+    "Hazard Register": "Hazard Register",
+    "Risk Analysis": "Risk Matrix",
+    "Readiness Dashboard": "Readiness Analysis",
+    "Deployment Decision": "Deployment Decision",
+    "Corrective Actions": "Corrective Actions",
+    "Reports and Export": "Reports and Export",
+    "Methodology": "Methodology",
+    "About MOBRA": "About MOBRA",
+}
+PAGE_ORDER = [page for pages in PAGE_GROUPS.values() for page in pages]
+PAGE_TO_GROUP = {page: group for group, pages in PAGE_GROUPS.items() for page in pages}
+
+
+def render_sidebar(
+    data_meta: dict,
+    hazard_result: ValidationResult,
+    requirement_result: ValidationResult,
+) -> str:
+    """Render concise navigation and the active-dataset summary."""
+    current = st.session_state.get("active_page", "Home")
+    if current not in PAGE_ORDER:
+        current = "Home"
+    with st.sidebar:
+        st.image(str(LOGO_DARK_PATH), use_container_width=True)
+        st.markdown('<div class="mobra-sidebar-rule"></div>', unsafe_allow_html=True)
+        selected = st.selectbox(
+            "Navigation",
+            PAGE_ORDER,
+            index=PAGE_ORDER.index(current),
+            format_func=lambda page: f"{PAGE_ICONS[page]}  {PAGE_LABELS[page]}",
+            key="mobra_navigation",
+        )
+        st.session_state.active_page = selected
+        st.markdown('<div class="mobra-sidebar-rule"></div>', unsafe_allow_html=True)
+        st.markdown("#### Active dataset")
+        source_label = str(data_meta.get("source_label", "No data"))
+        st.markdown(
+            f'<div class="mobra-sidebar-source">{escape(source_label)}</div>',
+            unsafe_allow_html=True,
+        )
+        filenames = {
+            str(data_meta.get("hazard_filename", "")),
+            str(data_meta.get("requirements_filename", "")),
+        }
+        filenames.discard("")
+        st.caption("File")
+        st.markdown(
+            f'<div class="mobra-sidebar-file">{escape(" / ".join(sorted(filenames)) or "Not available")}</div>',
+            unsafe_allow_html=True,
+        )
+        hazard_rows = len(data_meta.get("hazards_raw", pd.DataFrame()))
+        requirement_rows = len(data_meta.get("requirements_raw", pd.DataFrame()))
+        st.caption("Records")
+        st.write(
+            f"{count_phrase(hazard_rows, 'hazard')} \u00b7 "
+            f"{count_phrase(requirement_rows, 'requirement')}"
+        )
+        updated_raw = data_meta.get("last_updated")
+        try:
+            updated = datetime.fromisoformat(str(updated_raw)).strftime("%Y-%m-%d %H:%M")
+        except (TypeError, ValueError):
+            updated = "Not available"
+        st.caption("Last update")
+        st.write(updated)
+        errors = len(hazard_result.errors) + len(requirement_result.errors)
+        warnings = len(hazard_result.warnings) + len(requirement_result.warnings)
+        if errors:
+            st.error(f"Validation: {count_phrase(errors, 'error')}")
+        elif warnings:
+            st.warning(f"Validation: Passed with {count_phrase(warnings, 'warning')}")
+        else:
+            st.success("Validation: Passed")
+        st.markdown('<div class="mobra-sidebar-rule"></div>', unsafe_allow_html=True)
+        st.caption(f"{APP_NAME} \u00b7 Scientific decision support")
+        st.caption("Synthetic data are always labelled and never represented as operational evidence.")
+    return selected

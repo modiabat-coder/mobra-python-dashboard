@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="180" viewBox="0 0 760 180" role="img" aria-labelledby="title desc">
+  <title id="title">MOBRA logo for dark backgrounds</title>
+  <desc id="desc">A shield and readiness grid beside the MOBRA wordmark.</desc>
+  <g fill="none" fill-rule="evenodd">
+    <circle cx="88" cy="90" r="70" stroke="#5B7D88" stroke-width="2"/>
+    <path d="M88 24c20 14 40 19 58 20v39c0 38-22 62-58 75-36-13-58-37-58-75V44c18-1 38-6 58-20Z" fill="#147D85"/>
+    <g transform="translate(56 54)">
+      <rect width="64" height="64" rx="8" fill="#FFFFFF" opacity=".12"/>
+      <path d="M10 10h12v12H10zm16 0h12v12H26zm16 0h12v12H42zM10 26h12v12H10zm16 0h12v12H26zm16 0h12v12H42zM10 42h12v12H10z" fill="#71D0CA"/>
+      <path d="m27 47 9 9 18-24" stroke="#FFFFFF" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+    </g>
+    <g transform="translate(186 38)">
+      <text x="0" y="69" fill="#FFFFFF" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="76" font-weight="800" letter-spacing="2">MOBRA</text>
+      <rect x="2" y="86" width="84" height="5" rx="2.5" fill="#71D0CA"/>
+      <text x="0" y="121" fill="#D8E7EA" font-family="Inter,Noto Sans Arabic,Segoe UI,Arial,sans-serif" font-size="20" font-weight="500" letter-spacing=".25">Mobile Operational Biosecurity Readiness Assessment</text>
+    </g>
+  </g>
+</svg>

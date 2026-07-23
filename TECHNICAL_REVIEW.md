@@ -1,45 +1,108 @@
-# MOBRA technical review
+# MOBRA implementation and technical review
 
-## Problems found in the supplied package
+## Scope
 
-- The application was a single `app.py`; validation, scoring, readiness, decisions, charts, I/O, and reporting were tightly coupled.
-- The original validator calculated a risk score even when Likelihood/Consequence were missing or non-integer, did not validate duplicate IDs, and did not parse dates or residual-risk fields.
-- Critical-control flags and evidence completeness were only partially checked. The original report generator did not apply the BRI threshold or document critical-control overrides.
-- The UI heat map was created before the risk filter and asserted against the unfiltered row count, so filtered cell totals could be misleading.
-- The original report omitted input metadata, validation/data-quality results, critical-control failures, methodology, and limitations.
-- The original standalone generator could label the demonstration data READY solely because no extreme or failed critical control existed, even though high risks remained; the corrected generator applies the documented conditional-deployment rule for remaining high risk.
-- Excel sheet selection, unified-file splitting, templates, workbook export, and editable preview were absent.
-- During the clean Streamlit smoke test, the refactored UI initially exposed duplicate Plotly element IDs when the same domain chart appeared in two tabs; unique chart keys were added and the smoke test was rerun successfully.
+This development round upgraded the existing MOBRA project in place. It preserved the scientific calculation modules and source data while redesigning the Streamlit interface, branding, import workflow, charts, reports, exports, documentation, and test coverage.
 
-## Changes made
+## Files reviewed
 
-- Added the `mobra` package with independent `io`, `validation`, `risk`, `readiness`, `decisions`, `charts`, and `reporting` modules.
-- Added alias mapping and manual required-column overrides, CSV encoding fallbacks, XLSX/XLS sheet selection, unified-file support, duplicate-ID checks, numeric/date validation, residual-risk calculations, evidence and incomplete-record flags, and safe exports.
-- Preserved the fixed Risk Score, category boundaries, and weighted BRI formula. Added a configurable policy object without changing default thresholds.
-- Made extreme residual risk, failed/incomplete critical controls, validation errors, and an uncomputable BRI non-bypassable deployment overrides.
-- Rebuilt the filtered heat map and assert that cell totals equal valid filtered hazards.
-- Added unique Streamlit keys for repeated Plotly charts so the app runs cleanly in Streamlit's element registry.
-- Added an editable preview, validation panel, KPI cards, top-risk and corrective-control tables, CSV/XLSX/JSON/template downloads, and a standalone UTF-8 report.
-- Regenerated `MOBRA_Demo_Report.html` after the changes and expanded automated tests.
+- Application entry point and Streamlit configuration.
+- All `mobra` calculation, validation, I/O, chart, decision, readiness, and reporting modules.
+- Both synthetic sample datasets and both CSV templates.
+- Existing tests, report generator, README, generated report, and Git state.
+
+## Principal findings
+
+- Scientific logic was already separated into modules, but the interface remained a single long page with default Streamlit styling.
+- Heatmap data were counted correctly, but axis semantics were opposite the requested convention.
+- Decision labels included legacy outcomes outside the approved three-label vocabulary.
+- JSON was unsupported.
+- Imports, validation issues, requirements, hazards, actions, reporting, and methodology did not have dedicated views.
+- Styling was inline and repeated; no reusable component or institutional identity system existed.
+- The HTML report lacked the new identity and requested print-oriented organization.
+
+## Implemented changes
+
+### Identity and visual system
+
+- Added shield/readiness-grid SVG and PNG wordmarks, dark-background wordmark, compact icon, and favicon.
+- Added centralized typography, color, spacing, cards, controls, table, tab, alert, empty-state, sidebar, and responsive CSS.
+- Enlarged and rebalanced the sidebar wordmark, simplified visible navigation labels, and added wrapped dataset metadata.
+- Replaced fixed KPI columns with a reusable CSS grid that resolves to 4, 2, and 1 columns at controlled breakpoints.
+- Added consistent focus-visible and disabled-control states.
+- Added a matching Streamlit theme.
+- Preserved the approved risk colors across interface charts and reports.
+
+### Application architecture
+
+- Reduced `app.py` to configuration, context construction, sidebar rendering, and page dispatch.
+- Added reusable UI components, layout, state, and page renderers.
+- Added twelve clearly ordered views covering the complete assessment workflow.
+- Preserved active dataset and page state across reruns.
+
+### Data import and validation
+
+- Added CSV, XLSX, XLS, and JSON support.
+- Added Excel worksheet scoring, automatic selection, and manual override.
+- Added nested JSON record-collection discovery, dotted-name flattening, multi-collection selection, and clear structure errors.
+- Added mapping-confidence tables and required-field overrides.
+- Added grouped, searchable, downloadable validation issues.
+
+### Risk, readiness, and decisions
+
+- Preserved `Risk Score = Likelihood × Consequence`.
+- Preserved Low 1–4, Moderate 5–9, High 10–16, Extreme 17–25.
+- Corrected every matrix to X = Consequence and Y = Likelihood.
+- Added matrix tooltips with scores, category, count, and assigned hazard identifiers/names.
+- Verified matrix cell totals before rendering.
+- Preserved the weighted BRI formula and safe zero-denominator behavior.
+- Standardized final labels to DO NOT DEPLOY, CONDITIONAL DEPLOYMENT, and READY TO DEPLOY.
+- Kept Critical Controls, Extreme residual risk, material validation errors, critical missing evidence, and core-readiness failures non-bypassable.
+
+### Reporting and exports
+
+- Added branded, self-contained, UTF-8, print-ready HTML reporting.
+- Added responsive 4/2/1 report KPI layouts, solid high-contrast report branding, long-content wrapping, A4 page settings, and print page-break controls.
+- Added a structured eight-worksheet Excel workbook.
+- Added CSV and JSON helpers.
+- Added report preview and downloads in the interface.
+- Regenerated `MOBRA_Demo_Report.html`.
+
+### Documentation
+
+- Rewrote README with installation, workflow, pages, formats, formulas, decision rules, data limitations, exports, structure, identity, tests, and current screenshots.
 
 ## Verification record
 
-Commands run from the project folder:
+Executed from the project root:
 
 ```powershell
-python -m venv .venv
-python -m pip install -r requirements.txt
-python -m pytest -q
-python generate_demo_report.py
-streamlit run app.py --server.headless=true --server.port=8511
+.venv\Scripts\python.exe -m compileall -q app.py mobra ui generate_demo_report.py
+.venv\Scripts\python.exe -m pytest -q -p no:cacheprovider
+.venv\Scripts\python.exe generate_demo_report.py
+.venv\Scripts\python.exe -m streamlit run app.py --server.headless=true --server.port=8513
 ```
 
-The clean environment installed successfully. The final test suite covers risk boundaries, invalid inputs, BRI/domain BRI, critical-control and residual-risk overrides, filtered heat-map totals, CSV/XLSX reading, and HTML generation. Streamlit was smoke-tested by requesting `http://127.0.0.1:8511` and receiving HTTP 200.
+Results:
 
-## Remaining limitations and assumptions
+- Python compilation: passed.
+- Import validation: passed.
+- Automated tests: 52 passed.
+- Every navigation page: passed Streamlit application harness.
+- Report generation: passed.
+- Local Streamlit startup and HTTP render: passed.
+- Live browser checks at 1440 × 900, 1280 × 720, 1024 × 768, 820 px, and 768 px: passed.
+- KPI grids resolved to 4, 4, 2, 2, and 1 columns at those widths with no page or card overflow.
+- All twelve application pages were traversed in the live browser with no retired decision label or placeholder grammar.
+- Standalone report checks at desktop, 820 px, and 560 px: passed with 4/2/1 KPI layouts and no document overflow.
+- Browser console: zero application or report errors after the final render.
+- Heatmap: 24 valid hazards represented by 24 total matrix counts.
+- Demonstration decision: 86.7% BRI with 11 failed Critical Controls correctly displayed as DO NOT DEPLOY.
 
-- `.xls` reading depends on the `xlrd` package and an actual legacy XLS file; the test fixture uses XLSX because it is reproducible without binary test assets.
-- A critical control with no explicit accepted threshold uses its `maximum_score` as the threshold, matching the supplied prototype behavior. A `critical_threshold` column can override it.
-- When residual fields are absent, the current calculated risk is used as the decision risk and is labeled as such in the report; it is not silently called a residual measurement.
-- Unified files need a `record_type` column or both field sets on separate rows. Arbitrary external schemas still require manual mapping.
-- Demonstration data are synthetic/representative and must not be treated as real incident or clinical records.
+## Remaining limitations
+
+- External incident and index sources are not connected.
+- Legacy XLS reading depends on `xlrd`; exported workbooks use XLSX.
+- Custom scientific transformation of external incident variables into MOBRA scales is intentionally not implemented.
+- Report printing was verified through print CSS and browser rendering; organization-specific PDF templates may still require local printer/profile tuning.
+- Synthetic data remain demonstration records and are not scientific, field, clinical, or regulatory validation.

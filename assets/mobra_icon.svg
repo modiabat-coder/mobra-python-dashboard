@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256" role="img" aria-labelledby="title desc">
+  <title id="title">MOBRA icon</title>
+  <desc id="desc">A biosecurity shield with a structured readiness grid and check mark.</desc>
+  <g fill="none" fill-rule="evenodd">
+    <circle cx="128" cy="128" r="116" stroke="#D9E4E7" stroke-width="5"/>
+    <path d="M128 20c33 23 66 31 96 33v64c0 62-36 102-96 123-60-21-96-61-96-123V53c30-2 63-10 96-33Z" fill="#103B4D"/>
+    <g transform="translate(75 75)">
+      <rect width="106" height="106" rx="13" fill="#FFFFFF" opacity=".12"/>
+      <path d="M15 15h20v20H15zm28 0h20v20H43zm28 0h20v20H71zM15 43h20v20H15zm28 0h20v20H43zm28 0h20v20H71zM15 71h20v20H15z" fill="#39A7A0"/>
+      <path d="m44 80 15 15 31-41" stroke="#FFFFFF" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/>
+    </g>
+  </g>
+</svg>

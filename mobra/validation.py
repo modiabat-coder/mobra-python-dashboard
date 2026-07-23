@@ -8,7 +8,12 @@ from typing import Mapping
 import numpy as np
 import pandas as pd
 
+from .config import count_phrase
 from .risk import calculate_risk_score, classify_risk, valid_scale
+
+
+HAZARD_REQUIRED_FIELDS = ["hazard", "likelihood", "consequence"]
+REQUIREMENT_REQUIRED_FIELDS = ["requirement", "observed_score", "maximum_score"]
 
 
 @dataclass
@@ -79,6 +84,8 @@ HAZARD_ALIASES = {
     "risk_category": ["risk_category", "risk_level", "initial_risk_category"],
     "residual_likelihood": ["residual_likelihood", "post_control_likelihood"],
     "residual_consequence": ["residual_consequence", "post_control_consequence"],
+    "objective_evidence": ["objective_evidence", "evidence", "evidence_description"],
+    "related_requirement": ["related_requirement", "requirement_id", "related_control"],
     "corrective_action": ["corrective_action", "recommended_action", "action"],
     "responsible_person": ["responsible_person", "responsible", "owner", "assignee"],
     "status": ["status", "action_status", "outcome"],
@@ -89,6 +96,7 @@ REQUIREMENT_ALIASES = {
     "requirement_id": ["requirement_id", "id", "orl_id", "control_id"],
     "requirement": ["requirement", "requirement_text", "item", "control", "description"],
     "domain": ["domain", "operational_domain"],
+    "lifecycle_stage": ["lifecycle_stage", "stage", "mission_stage"],
     "objective_evidence": ["objective_evidence", "evidence", "evidence_description"],
     "observed_score": ["observed_score", "observed", "score", "actual_score"],
     "maximum_score": ["maximum_score", "maximum", "max_score", "possible_score"],
@@ -98,7 +106,44 @@ REQUIREMENT_ALIASES = {
     "responsible_person": ["responsible_person", "responsible", "owner", "assignee"],
     "due_date": ["due_date", "target_date", "action_due_date"],
     "critical_threshold": ["critical_threshold", "accepted_threshold", "minimum_score"],
+    "notes": ["notes", "comments", "assessment_notes"],
 }
+
+
+def suggest_column_mapping(
+    df: pd.DataFrame,
+    kind: str,
+) -> pd.DataFrame:
+    """Return deterministic alias matches with confidence and required status."""
+    if kind not in {"hazards", "requirements"}:
+        raise ValueError("kind must be 'hazards' or 'requirements'.")
+    aliases = HAZARD_ALIASES if kind == "hazards" else REQUIREMENT_ALIASES
+    required = HAZARD_REQUIRED_FIELDS if kind == "hazards" else REQUIREMENT_REQUIRED_FIELDS
+    normalized = normalise_columns(df)
+    rows: list[dict[str, object]] = []
+    for target, candidates in aliases.items():
+        match = target if target in normalized.columns else next(
+            (candidate for candidate in candidates if candidate in normalized.columns),
+            None,
+        )
+        if match == target:
+            confidence, status = 100, "Matched"
+        elif match:
+            confidence, status = 90, "Matched"
+        elif target in required:
+            confidence, status = 0, "Missing"
+        else:
+            confidence, status = 0, "Optional"
+        rows.append(
+            {
+                "standard_field": target,
+                "detected_source_column": match or "",
+                "confidence_pct": confidence,
+                "mapping_status": status,
+                "required": target in required,
+            }
+        )
+    return pd.DataFrame(rows)
 
 
 def _apply_aliases(df: pd.DataFrame, aliases: Mapping[str, list[str]], overrides: Mapping[str, str] | None) -> pd.DataFrame:
@@ -139,7 +184,11 @@ def _parse_dates(df: pd.DataFrame, result: ValidationResult) -> None:
     parsed = pd.to_datetime(raw, errors="coerce")
     invalid = raw.notna() & parsed.isna() & raw.astype(str).str.strip().ne("")
     if invalid.any():
-        result.warnings.append(f"{int(invalid.sum())} due-date value(s) could not be parsed and were left blank.")
+        count = int(invalid.sum())
+        result.warnings.append(
+            f"{count_phrase(count, 'due-date value')} could not be parsed and "
+            f"{'was' if count == 1 else 'were'} left blank."
+        )
     df["due_date"] = parsed.dt.strftime("%Y-%m-%d")
     df.loc[parsed.isna(), "due_date"] = pd.NA
     df["overdue"] = parsed.notna() & (parsed.dt.normalize() < pd.Timestamp.now().normalize())
@@ -149,7 +198,7 @@ def validate_hazards(df: pd.DataFrame, overrides: Mapping[str, str] | None = Non
     """Map and validate hazard records; invalid rows remain visible but are not analyzable."""
     out = _apply_aliases(df, HAZARD_ALIASES, overrides)
     result = ValidationResult(out)
-    required = ["hazard", "likelihood", "consequence"]
+    required = HAZARD_REQUIRED_FIELDS
     result.missing_columns = [column for column in required if column not in out.columns]
     if result.missing_columns:
         result.errors.append(f"Missing required hazard columns: {', '.join(result.missing_columns)}.")
@@ -159,10 +208,13 @@ def validate_hazards(df: pd.DataFrame, overrides: Mapping[str, str] | None = Non
         result.warnings.append("hazard_id was not supplied; stable row-based IDs were generated.")
     result.duplicate_ids = _duplicate_ids(out, "hazard_id")
     if result.duplicate_ids:
-        result.errors.append(f"Duplicate hazard_id value(s): {', '.join(result.duplicate_ids)}.")
+        result.errors.append(f"Duplicate hazard_id values: {', '.join(result.duplicate_ids)}.")
     blank_ids = _blank_ids(out, "hazard_id")
     if blank_ids:
-        result.errors.append(f"{blank_ids} hazard_id value(s) are blank.")
+        result.errors.append(
+            f"{count_phrase(blank_ids, 'hazard_id value')} "
+            f"{'is' if blank_ids == 1 else 'are'} blank."
+        )
 
     for column in ("likelihood", "consequence"):
         numeric = pd.to_numeric(out[column], errors="coerce")
@@ -170,7 +222,11 @@ def validate_hazards(df: pd.DataFrame, overrides: Mapping[str, str] | None = Non
         invalid = ~numeric.map(valid_scale)
         if invalid.any():
             result.invalid_rows.extend(out.index[invalid].tolist())
-            result.errors.append(f"{int(invalid.sum())} invalid '{column}' value(s); use integer values from 1 to 5.")
+            count = int(invalid.sum())
+            result.errors.append(
+                f"{count_phrase(count, f'invalid {column!r} value')}; "
+                "use integer values from 1 to 5."
+            )
     out["risk_score"] = calculate_risk_score(out["likelihood"], out["consequence"])
     valid_risk = out["likelihood"].map(valid_scale) & out["consequence"].map(valid_scale)
     out.loc[~valid_risk, "risk_score"] = np.nan
@@ -178,7 +234,19 @@ def validate_hazards(df: pd.DataFrame, overrides: Mapping[str, str] | None = Non
     out["risk_level"] = out["risk_category"]
     out["risk_value_source"] = "Calculated from likelihood × consequence"
 
-    for optional in ("hazard_category", "domain", "activity", "biological_agent", "cause", "existing_controls", "corrective_action", "responsible_person", "status"):
+    for optional in (
+        "hazard_category",
+        "domain",
+        "activity",
+        "biological_agent",
+        "cause",
+        "existing_controls",
+        "corrective_action",
+        "responsible_person",
+        "status",
+        "objective_evidence",
+        "related_requirement",
+    ):
         if optional not in out.columns:
             out[optional] = "Not provided"
     residual_present = {"residual_likelihood", "residual_consequence"}.intersection(out.columns)
@@ -190,7 +258,11 @@ def validate_hazards(df: pd.DataFrame, overrides: Mapping[str, str] | None = Non
             out[column] = numeric
             invalid = numeric.notna() & ~numeric.map(valid_scale)
             if invalid.any():
-                result.errors.append(f"{int(invalid.sum())} invalid '{column}' value(s); use integers from 1 to 5.")
+                count = int(invalid.sum())
+                result.errors.append(
+                    f"{count_phrase(count, f'invalid {column!r} value')}; "
+                    "use integers from 1 to 5."
+                )
                 result.invalid_rows.extend(out.index[invalid].tolist())
         residual_valid = out["residual_likelihood"].map(valid_scale) & out["residual_consequence"].map(valid_scale)
         out["residual_risk_score"] = calculate_risk_score(out["residual_likelihood"], out["residual_consequence"])
@@ -211,7 +283,11 @@ def _parse_boolean(series: pd.Series, result: ValidationResult) -> pd.Series:
     false_values = {"false", "0", "no", "n", "f", "not critical", ""}
     unknown = series.notna() & ~normalized.isin(true_values | false_values)
     if unknown.any():
-        result.warnings.append(f"{int(unknown.sum())} critical-control flag(s) were not recognized and treated as false.")
+        count = int(unknown.sum())
+        result.warnings.append(
+            f"{count_phrase(count, 'critical-control flag')} "
+            f"{'was' if count == 1 else 'were'} not recognized and treated as false."
+        )
     return normalized.isin(true_values)
 
 
@@ -219,7 +295,7 @@ def validate_requirements(df: pd.DataFrame, overrides: Mapping[str, str] | None 
     """Map and validate ORL requirement records and derive readiness fields."""
     out = _apply_aliases(df, REQUIREMENT_ALIASES, overrides)
     result = ValidationResult(out)
-    required = ["requirement", "observed_score", "maximum_score"]
+    required = REQUIREMENT_REQUIRED_FIELDS
     result.missing_columns = [column for column in required if column not in out.columns]
     if result.missing_columns:
         result.errors.append(f"Missing required requirement columns: {', '.join(result.missing_columns)}.")
@@ -229,10 +305,13 @@ def validate_requirements(df: pd.DataFrame, overrides: Mapping[str, str] | None 
         result.warnings.append("requirement_id was not supplied; stable row-based IDs were generated.")
     result.duplicate_ids = _duplicate_ids(out, "requirement_id")
     if result.duplicate_ids:
-        result.errors.append(f"Duplicate requirement_id value(s): {', '.join(result.duplicate_ids)}.")
+        result.errors.append(f"Duplicate requirement_id values: {', '.join(result.duplicate_ids)}.")
     blank_ids = _blank_ids(out, "requirement_id")
     if blank_ids:
-        result.errors.append(f"{blank_ids} requirement_id value(s) are blank.")
+        result.errors.append(
+            f"{count_phrase(blank_ids, 'requirement_id value')} "
+            f"{'is' if blank_ids == 1 else 'are'} blank."
+        )
 
     observed = pd.to_numeric(out["observed_score"], errors="coerce")
     maximum = pd.to_numeric(out["maximum_score"], errors="coerce")
@@ -240,8 +319,10 @@ def validate_requirements(df: pd.DataFrame, overrides: Mapping[str, str] | None 
     invalid = observed.isna() | maximum.isna() | (maximum <= 0) | (observed < 0) | (observed > maximum)
     if invalid.any():
         result.invalid_rows.extend(out.index[invalid].tolist())
+        count = int(invalid.sum())
         result.errors.append(
-            f"{int(invalid.sum())} invalid requirement row(s): observed must be ≥0, observed ≤ maximum, and maximum >0."
+            f"{count_phrase(count, 'invalid requirement row')}: observed must be "
+            "≥0, observed ≤ maximum, and maximum >0."
         )
     out["item_readiness_pct"] = 100 * observed / maximum
     out.loc[invalid, "item_readiness_pct"] = np.nan
@@ -256,13 +337,17 @@ def validate_requirements(df: pd.DataFrame, overrides: Mapping[str, str] | None 
     else:
         blank = out["critical_control"].isna() | out["critical_control"].astype(str).str.strip().eq("")
         if blank.any():
-            result.warnings.append(f"{int(blank.sum())} critical-control flag(s) are blank and treated as false.")
+            count = int(blank.sum())
+            result.warnings.append(
+                f"{count_phrase(count, 'critical-control flag')} "
+                f"{'is' if count == 1 else 'are'} blank and treated as false."
+            )
         out["critical_control"] = _parse_boolean(out["critical_control"], result)
     out["evidence_missing"] = out["objective_evidence"].isna() | out["objective_evidence"].astype(str).str.strip().isin(["", "nan", "none", "not provided"])
     out["incomplete"] = invalid | out["evidence_missing"]
     if "compliance_status" not in out.columns:
         out["compliance_status"] = np.where(out["incomplete"], "Incomplete", np.where(out["observed_score"] < out["maximum_score"], "Below threshold", "Compliant"))
-    for optional in ("corrective_action", "responsible_person"):
+    for optional in ("corrective_action", "responsible_person", "lifecycle_stage", "notes"):
         if optional not in out.columns:
             out[optional] = "Not provided"
     if "critical_threshold" in out.columns:
@@ -273,3 +358,51 @@ def validate_requirements(df: pd.DataFrame, overrides: Mapping[str, str] | None 
     result.data = out
     result.invalid_rows = sorted(set(result.invalid_rows))
     return result
+
+
+def validation_issue_table(
+    hazard_result: ValidationResult,
+    requirement_result: ValidationResult,
+) -> pd.DataFrame:
+    """Convert validation diagnostics into a grouped, exportable issue register."""
+    records: list[dict[str, str]] = []
+    for dataset, result in (
+        ("Hazard Register", hazard_result),
+        ("Requirements", requirement_result),
+    ):
+        for severity, messages in (
+            ("Error", result.errors),
+            ("Warning", result.warnings),
+        ):
+            for message in messages:
+                recommended_fix = (
+                    "Open Column Mapping and select the corresponding source column."
+                    if "missing required" in message.lower()
+                    else "Review the identified source records, correct the values, and validate again."
+                )
+                records.append(
+                    {
+                        "issue_type": "Schema or data quality",
+                        "dataset": dataset,
+                        "location": (
+                            ", ".join(str(row + 2) for row in result.invalid_rows[:20])
+                            if result.invalid_rows
+                            else "Dataset"
+                        ),
+                        "cause": message,
+                        "severity": severity,
+                        "recommended_fix": recommended_fix,
+                    }
+                )
+    if not records:
+        records.append(
+            {
+                "issue_type": "Validation status",
+                "dataset": "All active data",
+                "location": "Dataset",
+                "cause": "No validation errors or warnings were detected.",
+                "severity": "Information",
+                "recommended_fix": "No action is required.",
+            }
+        )
+    return pd.DataFrame(records)

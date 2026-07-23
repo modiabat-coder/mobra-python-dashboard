@@ -1,46 +1,16 @@
-# MOBRA Python Dashboard
+# MOBRA
 
-MOBRA (Mobile Operational Biosecurity Readiness Assessment) is a Streamlit decision-support prototype for external-dataset-based computational verification. It calculates laboratory hazard risk, the Biosecurity Readiness Index (BRI), domain BRI, critical-control status, and a transparent deployment recommendation.
+**Mobile Operational Biosecurity Readiness Assessment**
 
-This software is not clinical, operational, regulatory, or field validation of MOBRA.
+MOBRA is a Streamlit decision-support application for assessing the operational readiness and biosecurity of mobile biological laboratories. It combines operational requirements, Critical Controls, a hazard register, the Biosecurity Readiness Index (BRI), a 5 × 5 risk matrix, corrective actions, and transparent deployment-decision rules.
 
-## Core rules (unchanged)
+MOBRA supports technical verification, prototype testing, and external-data compatibility assessment. It is not clinical, regulatory, field, or final scientific validation of the MOBRA methodology.
 
-```text
-Risk Score = Likelihood × Consequence
-Low      = 1–4
-Moderate = 5–9
-High     = 10–16
-Extreme  = 17–25
+![MOBRA executive dashboard](assets/screenshots/home_dashboard.png)
 
-BRI (%) = sum(observed requirement scores)
-          / sum(maximum requirement scores) × 100
-```
+## Installation and local run
 
-An extreme residual risk, a failed or incomplete critical control, an invalid critical record, a validation error, or an uncomputable BRI produces **DO NOT DEPLOY** regardless of how high the BRI is. With no override, BRI <70% is **DEPLOYMENT NOT RECOMMENDED**, 70–84.9% is **CONDITIONAL DEPLOYMENT**, and BRI ≥85% is ready only when no high residual risk remains.
-
-## Project structure
-
-```text
-mobra_app_project/
-├── app.py                         # Streamlit UI
-├── mobra/
-│   ├── io.py                       # CSV/XLSX/XLS readers and unified-file split
-│   ├── validation.py               # aliases, schema validation, dates, quality flags
-│   ├── risk.py                     # scoring, categories, heat-map counts
-│   ├── readiness.py                # BRI, domain BRI, critical controls
-│   ├── decisions.py                # deployment policy and overrides
-│   ├── charts.py                   # Plotly figures
-│   └── reporting.py                # standalone UTF-8 HTML report
-├── sample_data/                    # 24 hazards, 60 ORL requirements, templates
-├── tests/test_logic.py             # unit, boundary, I/O, report, and override tests
-├── generate_demo_report.py         # regenerate MOBRA_Demo_Report.html
-└── TECHNICAL_REVIEW.md             # review findings and verification record
-```
-
-## Windows PowerShell setup
-
-From the extracted project folder:
+On Windows PowerShell:
 
 ```powershell
 py -3.11 -m venv .venv
@@ -48,51 +18,244 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 .venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
-python -m pytest -q
-python generate_demo_report.py
 streamlit run app.py
 ```
 
-If `py` is not available, use `python -m venv .venv`. The app opens at <http://localhost:8501>. Stop Streamlit with `Ctrl+C`.
+If `py` is unavailable, use `python -m venv .venv`. The application normally opens at `http://localhost:8501`.
 
-## Input files
+## Application workflow
 
-The UI supports:
+1. Open **Data Import**.
+2. Choose separate Hazard Register and Requirements files, or one unified file.
+3. Upload CSV, XLSX, XLS, or JSON.
+4. For Excel, review the automatically detected worksheet and override it if needed.
+5. Preview a limited, scrollable sample.
+6. Review automatic Column Mapping confidence and set any required overrides.
+7. Validate required fields, scales, identifiers, dates, scores, and evidence.
+8. Explicitly confirm the analysis copy.
+9. Review Requirements, Hazards, Risk Analysis, Readiness, Deployment Decision, and Corrective Actions.
+10. Generate branded CSV, XLSX, JSON, and HTML exports.
 
-- Two separate files: a hazard register plus an ORL/requirements file.
-- One unified CSV/XLSX/XLS file with a `record_type` column containing hazard/risk and requirement/ORL/control values, or with both field sets present on separate rows.
-- CSV encoded as UTF-8, UTF-8 with BOM, CP1256, or Latin-1.
-- XLSX and legacy XLS, with explicit sheet selection.
+The original source file is never overwritten.
 
-Hazard required fields are equivalent to `hazard`, `likelihood`, and `consequence`. Requirement required fields are equivalent to `requirement`, `observed_score`, and `maximum_score`. Automatic aliases cover the full MOBRA field list; the sidebar also provides manual overrides for required columns. Missing optional fields are reported rather than causing a crash.
+## Pages
 
-Invalid rows remain visible in the validation preview but are excluded from calculations. Duplicate IDs, out-of-range risk scales, impossible observed/max scores, malformed dates, missing evidence, and blank critical-control flags are reported explicitly.
+- **Home** — executive status, Deployment Decision, KPIs, domain readiness, risk, Critical Controls, and priority actions.
+- **Data Import** — guided file selection, upload, worksheet choice, preview, mapping, validation, and confirmation.
+- **Data Validation** — grouped errors, warnings, information, search, and downloadable validation report.
+- **Requirements Assessment** — readiness, Critical Controls, Objective Evidence, filters, and focused requirement detail.
+- **Hazard Register** — initial/residual risk, filters, ownership, status, controls, and focused hazard detail.
+- **Risk Analysis** — category distribution, initial/residual comparison, domain concentration, top hazards, and verified matrix.
+- **Readiness Dashboard** — compact Overall BRI, weighted domain readiness, and least-ready-domain priorities.
+- **Deployment Decision** — primary reasons, blockers, required actions, owners, dates, and reassessment conditions.
+- **Corrective Actions** — priority, owner, target date, status, overdue flag, and completion evidence.
+- **Reports and Export** — branded HTML report, structured Excel workbook, JSON summary, and CSV outputs.
+- **Methodology** — fixed formulas, thresholds, terms, and decision rules.
+- **About MOBRA** — identity, validation boundary, scope, and future-data compatibility.
 
-## Outputs
+## Supported input formats
 
-The **Data & exports** tab provides:
+### CSV
 
-- Calculated hazards and requirements as UTF-8 CSV.
-- A summary JSON file.
-- An analyzed XLSX workbook.
-- A self-contained HTML report that opens directly in a browser.
-- Hazard and ORL template CSV files.
+- UTF-8, UTF-8 with BOM, CP1256, and Latin-1 fallbacks.
 
-The heat map always rebuilds from the currently selected risk-category filter. A programmatic assertion verifies that cell counts equal the number of valid filtered hazards.
+### Excel
 
-## Tests and report generation
+- XLSX through `openpyxl`.
+- Legacy XLS through `xlrd`.
+- Worksheet listing, best-sheet detection, and manual override.
+
+### JSON
+
+- A top-level list of record objects.
+- A dictionary containing one or more nested record lists.
+- Detection and preview of multiple record collections.
+- Flattening of nested objects using dotted field names.
+- Preservation of remaining nested list/dictionary values as JSON text.
+- Clear errors for empty, invalid, scalar-only, excessively large, or unsafe structures.
+
+### Minimum required fields
+
+Hazard data require equivalents of:
+
+- `hazard`
+- `likelihood`
+- `consequence`
+
+Requirement data require equivalents of:
+
+- `requirement`
+- `observed_score`
+- `maximum_score`
+
+Automatic aliases and manual mapping are available. Analysis is blocked while required fields or invalid critical values remain unresolved.
+
+## Scientific rules
+
+### Risk Score and categories
+
+```text
+Risk Score = Likelihood × Consequence
+
+Low       1–4      Green
+Moderate  5–9      Yellow
+High      10–16    Orange
+Extreme   17–25    Red
+```
+
+The risk matrix always uses:
+
+- X-axis: **Consequence**, 1 to 5.
+- Y-axis: **Likelihood**, 1 to 5.
+
+Each cell displays the actual number of valid hazards at that Likelihood–Consequence combination. The application verifies that all cell counts sum to the valid hazard total before rendering the matrix.
+
+![MOBRA risk analysis](assets/screenshots/risk_analysis.png)
+
+### Biosecurity Readiness Index
+
+```text
+BRI (%) = Sum of Observed Requirement Scores
+          ÷ Sum of Maximum Requirement Scores
+          × 100
+```
+
+The application excludes invalid score rows, handles a zero denominator as `N/A`, and uses the same weighted formula for domain readiness.
+
+![MOBRA readiness dashboard](assets/screenshots/readiness_dashboard.png)
+
+### Deployment Decision
+
+**DO NOT DEPLOY** if one or more of these conditions exists:
+
+- A Critical Control is not satisfied.
+- An Extreme residual risk exists.
+- Critical data are materially incomplete.
+- A mission-critical requirement has failed.
+- Required evidence for a Critical Control is missing.
+
+**CONDITIONAL DEPLOYMENT** requires satisfied Critical Controls, no Extreme residual risk, and defined corrective actions for manageable High risks or remaining readiness improvements.
+
+**READY TO DEPLOY** requires satisfied Critical Controls, no Extreme residual risk, acceptable residual risks, complete data, required evidence, and satisfied core readiness requirements.
+
+A high BRI never overrides a Critical Control or Extreme-risk blocker. In the included demonstration dataset, Overall BRI is 86.7% but 11 Critical Controls fail, so the required result is **DO NOT DEPLOY**.
+
+![MOBRA deployment decision](assets/screenshots/deployment_decision.png)
+
+## Synthetic Demonstration Data
+
+The included files contain 24 representative hazards and 60 operational requirements. They are always labelled:
+
+> Synthetic Demonstration Data
+
+They are not real operational records and must not be presented as incident evidence, regulatory validation, clinical validation, or final scientific validation.
+
+The architecture can support future import testing for incident, exposure, event, and index datasets, but no external data source is connected unless an implementation explicitly documents that connection.
+
+## Reports and exports
+
+Available outputs:
+
+- Hazard Register CSV.
+- Requirements CSV.
+- Corrective Actions CSV.
+- Validation Report CSV.
+- Executive Summary JSON.
+- Branded, self-contained UTF-8 HTML report.
+- Multi-worksheet XLSX workbook.
+
+The Excel workbook includes:
+
+- Executive Summary
+- Domain Summary
+- Requirements
+- Hazard Register
+- Risk Matrix
+- Critical Controls
+- Corrective Actions
+- Validation Issues
+
+The HTML report includes the MOBRA identity, generation metadata, source status, executive summary, BRI, Deployment Decision and reasons, domain readiness, risk summary, verified heatmap, Critical Controls, top hazards, corrective actions, validation summary, methodology, and limitations. Print styles provide logical page breaks.
+
+![MOBRA reports and export](assets/screenshots/reports_export.png)
+
+## Project structure
+
+```text
+.
+├── app.py                    # Minimal Streamlit entry point
+├── assets/                   # SVG/PNG branding, favicon, and screenshots
+├── mobra/
+│   ├── actions.py            # Unified corrective-action register
+│   ├── charts.py             # Shared Plotly theme and figures
+│   ├── config.py             # Names, paths, palette, risk/decision constants
+│   ├── decisions.py          # Deployment rules and overrides
+│   ├── io.py                 # CSV/XLSX/XLS/JSON readers and detection
+│   ├── readiness.py          # BRI, domain readiness, Critical Controls
+│   ├── reporting.py          # HTML, Excel, JSON, and CSV exports
+│   ├── risk.py               # Risk scoring, categories, matrix counts
+│   └── validation.py         # Aliases, mapping, validation, issue register
+├── ui/
+│   ├── components.py         # Headers, cards, badges, decisions, empty states
+│   ├── layout.py             # Sidebar and grouped navigation
+│   ├── pages.py              # Page renderers and shared assessment context
+│   ├── state.py              # Active dataset and navigation session state
+│   └── styles.py             # Centralized responsive CSS
+├── sample_data/              # Synthetic samples and templates
+├── tests/test_logic.py       # Scientific, I/O, export, and UI smoke tests
+└── generate_demo_report.py   # Standalone report generator
+```
+
+## Tests
+
+Run:
 
 ```powershell
-python -m pytest -q
+python -m pytest -q -p no:cacheprovider
 python generate_demo_report.py
 ```
 
-The test suite covers every category boundary, invalid scales, missing columns, duplicate IDs, observed scores above maximum, zero maximum scores, weighted BRI/domain BRI, residual-risk and critical-control overrides, filtered heat-map totals, CSV/XLSX readers, and HTML report generation.
+The suite covers:
 
-## GitHub and Streamlit Community Cloud
+- Risk Score and all category boundaries.
+- Invalid Likelihood and Consequence values.
+- Weighted BRI and zero denominator.
+- Domain readiness.
+- Heatmap axes, counts, tooltips, names, and total validation.
+- Critical Control and Extreme residual-risk overrides.
+- DO NOT DEPLOY, CONDITIONAL DEPLOYMENT, and READY TO DEPLOY.
+- CSV, XLSX, XLS engine selection, and JSON.
+- Column Mapping and required fields.
+- Branded HTML and multi-worksheet Excel exports.
+- Exact decision vocabulary and real singular/plural grammar.
+- Responsive KPI-grid and report-structure contracts.
+- Demonstration invariants: 24 hazards, 86.7% BRI, 11 failed Critical Controls, and DO NOT DEPLOY.
+- Default and every-page Streamlit smoke tests.
 
-Create a repository containing this folder, commit the source and sample data, and push it to GitHub. In Streamlit Community Cloud select the repository, branch, and `app.py` as the main file. Keep `requirements.txt` at the project root. Do not commit `.venv`, secrets, or real laboratory records.
+Current verification result: **52 tests passed**. Live browser checks cover all twelve
+pages plus 1440×900, 1280×720, 1024×768, 820 px, and 768 px application
+viewports. The standalone report is also checked at desktop, 820 px, and 560 px.
 
-## Scientific and data limitations
+## Visual identity
 
-The included 24-hazard and 60-requirement files are representative demonstration data. External incident datasets may not contain 1–5 Likelihood/Consequence scores; any future transformation must be explicit, reproducible, documented, and kept separate from raw columns. A high BRI is not evidence that a mission is safe when a critical-control or extreme-risk override is present.
+The MOBRA identity combines:
+
+- A shield for biosecurity, protection, and containment.
+- A structured grid for risk assessment.
+- A check mark for verified operational readiness.
+
+The assets include transparent light- and dark-background wordmarks, vector and PNG variants, a compact icon, and favicon. The interface and reports share a restrained navy/teal palette, consistent typography, spacing, cards, status messages, tables, and risk colors.
+
+## Additional screenshots
+
+![MOBRA data import](assets/screenshots/data_import.png)
+
+![MOBRA data validation](assets/screenshots/data_validation.png)
+
+## Limitations
+
+- Legacy XLS reading depends on `xlrd`; workbook creation exports XLSX.
+- Very large JSON files should be split before import; the application rejects JSON over 50 MB.
+- Arbitrary external schemas may require manual Column Mapping.
+- When residual-risk fields are absent, the current calculated risk is used as the decision risk and is clearly identified as such.
+- A Critical Control without an explicit `critical_threshold` uses its maximum score as the accepted threshold, preserving existing project behavior.
