@@ -4,10 +4,12 @@ from __future__ import annotations
 
 from io import BytesIO
 from pathlib import Path
+from zipfile import ZipFile
 
 import pandas as pd
 import pytest
 
+from mobra.acceptance import RiskAcceptancePolicy, apply_risk_acceptance
 from mobra.config import (
     DECISION_CONDITIONAL,
     DECISION_DO_NOT_DEPLOY,
@@ -15,11 +17,27 @@ from mobra.config import (
     DECISION_READY,
     count_phrase,
 )
+from mobra.critical_controls import (
+    assess_critical_controls,
+    validate_critical_control_profile,
+)
 from mobra.decisions import deployment_decision
+from mobra.educational_media import (
+    educational_media_package,
+    load_educational_media,
+)
 from mobra.charts import heatmap_figure
 from mobra.io import list_excel_sheets, read_data_file, read_json_collections
+from mobra.mapping import mapping_coverage_summary, validate_mapping
+from mobra.manuscript import manuscript_is_current, manuscript_metadata
+from mobra.operational_tools import (
+    build_field_assessment_package,
+    build_hazard_pdf,
+    build_orl_pdf,
+)
 from mobra.readiness import calculate_bri, domain_readiness, failed_critical_controls
 from mobra.reporting import make_excel_workbook, make_html_report
+from mobra.resources import load_normative_resources, validate_resource_manifest
 from mobra.risk import assert_heatmap_total, classify_risk, heatmap_counts, heatmap_total
 from mobra.validation import (
     suggest_column_mapping,
@@ -341,6 +359,87 @@ def test_navigation_has_exactly_twelve_pages() -> None:
     assert len(set(PAGE_ORDER)) == 12
 
 
+def test_preserved_mapping_and_governance_features_do_not_change_invariants() -> None:
+    hazards = validate_hazards(
+        pd.read_csv(ROOT / "sample_data" / "hazards_sample.csv")
+    ).data
+    requirements = validate_requirements(
+        pd.read_csv(ROOT / "sample_data" / "requirements_sample.csv")
+    ).data
+    mapping = validate_mapping(
+        pd.read_csv(ROOT / "sample_data" / "requirement_hazard_mapping.csv"),
+        requirements,
+        hazards,
+    )
+    profile = validate_critical_control_profile(
+        pd.read_csv(ROOT / "sample_data" / "critical_control_profile.csv"),
+        requirements,
+    )
+    governance = assess_critical_controls(requirements, profile.data)
+    coverage = mapping_coverage_summary(mapping.data, requirements, hazards)
+
+    assert mapping.ok and profile.ok and governance.ok
+    assert coverage["hazards_mapped"] == 24
+    assert coverage["hazard_coverage_pct"] == 100
+    assert calculate_bri(requirements) == pytest.approx(86.7, abs=0.05)
+    assert len(failed_critical_controls(requirements)) == 11
+    decision, _ = deployment_decision(
+        hazards,
+        requirements,
+        calculate_bri(requirements),
+    )
+    assert decision == DECISION_DO_NOT_DEPLOY
+
+
+def test_preserved_risk_acceptance_cannot_disable_extreme_risk_block() -> None:
+    with pytest.raises(ValueError, match="non-bypassable"):
+        RiskAcceptancePolicy(extreme_blocks_deployment=False)
+    hazards = validate_hazards(
+        pd.DataFrame(
+            {
+                "hazard_id": ["HX"],
+                "hazard": ["Extreme representative hazard"],
+                "likelihood": [5],
+                "consequence": [5],
+            }
+        )
+    ).data
+    assessed = apply_risk_acceptance(hazards, RiskAcceptancePolicy())
+    assert assessed.loc[0, "risk_acceptance_status"] == "Unacceptable"
+    assert bool(assessed.loc[0, "formal_approval_required"])
+
+
+def test_preserved_field_tools_and_resource_catalogue_are_portable() -> None:
+    hazards = validate_hazards(
+        pd.read_csv(ROOT / "sample_data" / "hazards_sample.csv")
+    ).data
+    requirements = validate_requirements(
+        pd.read_csv(ROOT / "sample_data" / "requirements_sample.csv")
+    ).data
+    package = build_field_assessment_package(requirements, hazards)
+    sheets = pd.ExcelFile(BytesIO(package), engine="openpyxl").sheet_names
+    assert "ORL_Assessment" in sheets
+    assert "Hazard_Register" in sheets
+    assert build_orl_pdf(requirements).startswith(b"%PDF")
+    assert build_hazard_pdf(hazards).startswith(b"%PDF")
+    resources = load_normative_resources()
+    assert resources
+    assert validate_resource_manifest(resources) == []
+
+
+def test_preserved_media_and_manuscript_assets_are_complete_and_relative() -> None:
+    media = load_educational_media()
+    assert len(media) == 10
+    with ZipFile(BytesIO(educational_media_package(media))) as archive:
+        names = archive.namelist()
+    assert names
+    assert all(":" not in name and not name.startswith("/") for name in names)
+    manuscript = manuscript_metadata()
+    assert manuscript["manuscript_available"]
+    assert manuscript["manuscript_page_count"]
+    assert manuscript_is_current()
+
+
 def test_user_facing_sources_have_no_retired_labels_or_placeholder_grammar() -> None:
     paths = [
         *sorted((ROOT / "mobra").glob("*.py")),
@@ -385,8 +484,9 @@ def test_streamlit_app_smoke() -> None:
     app = AppTest.from_file(str(ROOT / "app.py"))
     app.run(timeout=30)
     assert not app.exception
-    assert app.selectbox[0].label == "Navigation"
-    assert app.selectbox[0].value == "Home"
+    assert app.radio[0].label == "Navigation"
+    assert app.radio[0].value == "Home"
+    assert any("Risk Matrix & Heatmap" in option for option in app.radio[0].options)
 
 
 def test_every_application_page_smoke() -> None:

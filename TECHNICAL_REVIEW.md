@@ -4,6 +4,14 @@
 
 This development round upgraded the existing MOBRA project in place. It preserved the scientific calculation modules and source data while redesigning the Streamlit interface, branding, import workflow, charts, reports, exports, documentation, and test coverage.
 
+The final reconciliation also restored the advanced functions retained on the
+historical development branch: requirement–hazard mapping, structured
+cross-dataset findings, Critical Control governance metadata, provisional risk
+acceptance, field assessment workbooks and printable forms, import templates,
+and normative resource catalogues. These functions are integrated into the
+existing twelve-view interface and remain supplementary to the canonical
+scientific decision path.
+
 ## Files reviewed
 
 - Application entry point and Streamlit configuration.
@@ -87,7 +95,7 @@ Results:
 
 - Python compilation: passed.
 - Import validation: passed.
-- Automated tests: 52 passed.
+- Automated tests: 56 passed.
 - Every navigation page: passed Streamlit application harness.
 - Report generation: passed.
 - Local Streamlit startup and HTTP render: passed.

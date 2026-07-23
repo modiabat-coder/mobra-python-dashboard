@@ -16,6 +16,12 @@ All notable changes to MOBRA are documented in this file.
 - Branded standalone HTML report and eight-worksheet Excel export.
 - Release deployment guide, technical review, QA summary, and automated
   scientific regression coverage.
+- Preserved requirement–hazard mapping, structured cross-dataset validation,
+  Critical Control governance, provisional risk acceptance, field forms,
+  import templates, and normative resource catalogues from the prior
+  development line.
+- Added a function-preservation matrix documenting where every restored
+  capability appears in the twelve-view application structure.
 
 ### Changed
 
@@ -24,6 +30,10 @@ All notable changes to MOBRA are documented in this file.
 - Standardized user-facing singular/plural grammar.
 - Improved sidebar branding, concise navigation, long-filename wrapping,
   keyboard focus visibility, table readability, and report print behavior.
+- Replaced the collapsed page selector with a fully visible twelve-item
+  navigation list and identified the Risk Matrix & Heatmap explicitly.
+- Replaced deprecated Streamlit `use_container_width` arguments with
+  `width="stretch"` for Streamlit 1.60 compatibility.
 
 ### Verified
 
@@ -34,5 +44,4 @@ All notable changes to MOBRA are documented in this file.
 - Risk score remains Likelihood × Consequence.
 - Risk thresholds remain Low 1–4, Moderate 5–9, High 10–16, and Extreme 17–25.
 - Failed critical controls remain non-bypassable.
-- 52 automated tests pass.
-
+- 56 automated tests pass.

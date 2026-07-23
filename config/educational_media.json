@@ -1,0 +1,184 @@
+{
+  "media": [
+    {
+      "media_id": "POSTER-BIOSAFETY_OVERVIEW",
+      "title": "Biosafety",
+      "topic": "Biosafety",
+      "description": "Preventing unintended exposure and protecting people, animals, and the environment.",
+      "svg_path": "assets/posters/biosafety_overview.svg",
+      "png_path": "assets/posters/biosafety_overview.png",
+      "pdf_path": "assets/posters/biosafety_overview.pdf",
+      "source_resource_ids": [
+        "WHO-01",
+        "WHO-02",
+        "ISO-01",
+        "BMBL-01"
+      ],
+      "educational_status": "Original educational summary",
+      "copyright_note": "MOBRA-created artwork and paraphrased educational content. No endorsement is claimed.",
+      "last_updated": "2026-07-23"
+    },
+    {
+      "media_id": "POSTER-BIOSECURITY_OVERVIEW",
+      "title": "Biosecurity",
+      "topic": "Biosecurity",
+      "description": "Protecting biological materials, information, and capabilities from misuse or loss.",
+      "svg_path": "assets/posters/biosecurity_overview.svg",
+      "png_path": "assets/posters/biosecurity_overview.png",
+      "pdf_path": "assets/posters/biosecurity_overview.pdf",
+      "source_resource_ids": [
+        "WHO-01",
+        "WHO-02",
+        "ISO-01",
+        "BMBL-01"
+      ],
+      "educational_status": "Original educational summary",
+      "copyright_note": "MOBRA-created artwork and paraphrased educational content. No endorsement is claimed.",
+      "last_updated": "2026-07-23"
+    },
+    {
+      "media_id": "POSTER-BIORISK_MANAGEMENT",
+      "title": "Biorisk Management",
+      "topic": "Biorisk Management",
+      "description": "A structured cycle for identifying, evaluating, controlling, and reviewing biorisk.",
+      "svg_path": "assets/posters/biorisk_management.svg",
+      "png_path": "assets/posters/biorisk_management.png",
+      "pdf_path": "assets/posters/biorisk_management.pdf",
+      "source_resource_ids": [
+        "WHO-01",
+        "WHO-02",
+        "ISO-01",
+        "BMBL-01"
+      ],
+      "educational_status": "Original educational summary",
+      "copyright_note": "MOBRA-created artwork and paraphrased educational content. No endorsement is claimed.",
+      "last_updated": "2026-07-23"
+    },
+    {
+      "media_id": "POSTER-MOBILE_BIOLOGICAL_LABORATORY",
+      "title": "Mobile Biological Laboratories",
+      "topic": "Mobile Biological Laboratories",
+      "description": "A deployable laboratory context where readiness, logistics, and traceability meet.",
+      "svg_path": "assets/posters/mobile_biological_laboratory.svg",
+      "png_path": "assets/posters/mobile_biological_laboratory.png",
+      "pdf_path": "assets/posters/mobile_biological_laboratory.pdf",
+      "source_resource_ids": [
+        "WHO-01",
+        "WHO-02",
+        "ISO-01",
+        "BMBL-01"
+      ],
+      "educational_status": "Original educational summary",
+      "copyright_note": "MOBRA-created artwork and paraphrased educational content. No endorsement is claimed.",
+      "last_updated": "2026-07-23"
+    },
+    {
+      "media_id": "POSTER-RISK_ASSESSMENT",
+      "title": "Risk Assessment",
+      "topic": "Risk Assessment",
+      "description": "A transparent review of likelihood, consequence, uncertainty, and controls.",
+      "svg_path": "assets/posters/risk_assessment.svg",
+      "png_path": "assets/posters/risk_assessment.png",
+      "pdf_path": "assets/posters/risk_assessment.pdf",
+      "source_resource_ids": [
+        "WHO-01",
+        "WHO-02",
+        "ISO-01",
+        "BMBL-01"
+      ],
+      "educational_status": "Original educational summary",
+      "copyright_note": "MOBRA-created artwork and paraphrased educational content. No endorsement is claimed.",
+      "last_updated": "2026-07-23"
+    },
+    {
+      "media_id": "POSTER-INCIDENT_NOTIFICATION",
+      "title": "Incident Notification and Reporting",
+      "topic": "Incident Notification and Reporting",
+      "description": "Timely, traceable escalation supports learning and accountable response.",
+      "svg_path": "assets/posters/incident_notification.svg",
+      "png_path": "assets/posters/incident_notification.png",
+      "pdf_path": "assets/posters/incident_notification.pdf",
+      "source_resource_ids": [
+        "WHO-01",
+        "WHO-02",
+        "ISO-01",
+        "BMBL-01"
+      ],
+      "educational_status": "Original educational summary",
+      "copyright_note": "MOBRA-created artwork and paraphrased educational content. No endorsement is claimed.",
+      "last_updated": "2026-07-23"
+    },
+    {
+      "media_id": "POSTER-CRITICAL_CONTROLS",
+      "title": "Critical Controls",
+      "topic": "Critical Controls",
+      "description": "Controls that can block an automatic deployment-ready decision when failed.",
+      "svg_path": "assets/posters/critical_controls.svg",
+      "png_path": "assets/posters/critical_controls.png",
+      "pdf_path": "assets/posters/critical_controls.pdf",
+      "source_resource_ids": [
+        "WHO-01",
+        "WHO-02",
+        "ISO-01",
+        "BMBL-01"
+      ],
+      "educational_status": "Original educational summary",
+      "copyright_note": "MOBRA-created artwork and paraphrased educational content. No endorsement is claimed.",
+      "last_updated": "2026-07-23"
+    },
+    {
+      "media_id": "POSTER-INFECTIOUS_SUBSTANCE_TRANSPORT",
+      "title": "Transport of Infectious Substances",
+      "topic": "Transport of Infectious Substances",
+      "description": "Plan packaging, documentation, custody, route, and emergency communication.",
+      "svg_path": "assets/posters/infectious_substance_transport.svg",
+      "png_path": "assets/posters/infectious_substance_transport.png",
+      "pdf_path": "assets/posters/infectious_substance_transport.pdf",
+      "source_resource_ids": [
+        "WHO-01",
+        "WHO-02",
+        "ISO-01",
+        "BMBL-01"
+      ],
+      "educational_status": "Original educational summary",
+      "copyright_note": "MOBRA-created artwork and paraphrased educational content. No endorsement is claimed.",
+      "last_updated": "2026-07-23"
+    },
+    {
+      "media_id": "POSTER-OBJECTIVE_EVIDENCE_TRACEABILITY",
+      "title": "Objective Evidence and Traceability",
+      "topic": "Objective Evidence and Traceability",
+      "description": "Connect requirements to records, observations, owners, and review decisions.",
+      "svg_path": "assets/posters/objective_evidence_traceability.svg",
+      "png_path": "assets/posters/objective_evidence_traceability.png",
+      "pdf_path": "assets/posters/objective_evidence_traceability.pdf",
+      "source_resource_ids": [
+        "WHO-01",
+        "WHO-02",
+        "ISO-01",
+        "BMBL-01"
+      ],
+      "educational_status": "Original educational summary",
+      "copyright_note": "MOBRA-created artwork and paraphrased educational content. No endorsement is claimed.",
+      "last_updated": "2026-07-23"
+    },
+    {
+      "media_id": "POSTER-BIOSECURITY_READINESS_INDEX",
+      "title": "Biosecurity Readiness Index",
+      "topic": "Biosecurity Readiness Index",
+      "description": "A score of requirement readiness that does not override blocking controls.",
+      "svg_path": "assets/posters/biosecurity_readiness_index.svg",
+      "png_path": "assets/posters/biosecurity_readiness_index.png",
+      "pdf_path": "assets/posters/biosecurity_readiness_index.pdf",
+      "source_resource_ids": [
+        "WHO-01",
+        "WHO-02",
+        "ISO-01",
+        "BMBL-01"
+      ],
+      "educational_status": "Original educational summary",
+      "copyright_note": "MOBRA-created artwork and paraphrased educational content. No endorsement is claimed.",
+      "last_updated": "2026-07-23"
+    }
+  ]
+}

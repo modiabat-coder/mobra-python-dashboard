@@ -121,6 +121,21 @@ def apply_global_styles() -> None:
             overflow-wrap: anywhere;
             word-break: break-word;
         }}
+        [data-testid="stSidebar"] [role="radiogroup"] {{
+            gap: .12rem;
+        }}
+        [data-testid="stSidebar"] [role="radiogroup"] label {{
+            margin: 0;
+            padding: .28rem .36rem;
+            border-radius: var(--mobra-radius-sm);
+        }}
+        [data-testid="stSidebar"] [role="radiogroup"] label:hover {{
+            background: rgba(255,255,255,.08);
+        }}
+        [data-testid="stSidebar"] [role="radiogroup"] label:has(input:checked) {{
+            background: rgba(57,167,160,.22);
+            box-shadow: inset 3px 0 0 var(--mobra-accent);
+        }}
         [data-testid="stSidebar"] [data-baseweb="select"] > div {{
             border-color: rgba(255,255,255,.26) !important;
             background: #F7FBFC !important;

@@ -1,0 +1,96 @@
+mapping_id,requirement_id,hazard_id,relationship_type,mapping_rationale,control_role,critical_link,source_status
+M001,R011,H001,Preventive,Valid BSC certification supports containment of aerosols released during centrifugation.,Primary,TRUE,Representative Demonstration Mapping
+M002,R020,H001,Preventive,Current centrifuge maintenance reduces rotor or tube failure likelihood.,Supporting,TRUE,Representative Demonstration Mapping
+M003,R042,H001,Preventive,Task-specific PPE reduces exposure if aerosol containment is breached.,Supporting,FALSE,Representative Demonstration Mapping
+M004,R049,H001,Governance,Current centrifugation and containment SOPs standardize safe operation.,Supporting,FALSE,Representative Demonstration Mapping
+M005,R015,H002,Preventive,Compliant triple packaging prevents specimen release during transport.,Primary,TRUE,Representative Demonstration Mapping
+M006,R038,H002,Mixed,Verified vehicle and specimen conditions prevent and detect transport failures.,Primary,TRUE,Representative Demonstration Mapping
+M007,R039,H002,Recovery,Route and security contingencies support response to transport disruption.,Supporting,FALSE,Representative Demonstration Mapping
+M008,R014,H002,Detective,Chain-of-custody records reveal packaging or custody deviations.,Supporting,TRUE,Representative Demonstration Mapping
+M009,R028,H003,Preventive,Restricted logged access directly limits unauthorized entry to pathogen storage.,Primary,TRUE,Representative Demonstration Mapping
+M010,R029,H003,Detective,Inventory reconciliation detects unauthorized removal or unexplained stock changes.,Supporting,TRUE,Representative Demonstration Mapping
+M011,R030,H003,Preventive,Controlled escorted visitor access reduces unauthorized storage-area entry.,Supporting,FALSE,Representative Demonstration Mapping
+M012,R008,H004,Detective,Negative-pressure verification detects containment performance loss before operation.,Primary,TRUE,Representative Demonstration Mapping
+M013,R021,H004,Recovery,Backup equipment capacity supports containment recovery after HVAC failure.,Supporting,TRUE,Representative Demonstration Mapping
+M014,R040,H004,Recovery,Tested backup power helps maintain pressure control during an outage.,Primary,TRUE,Representative Demonstration Mapping
+M015,R052,H004,Recovery,Available service support shortens restoration time after pressure-system failure.,Supporting,FALSE,Representative Demonstration Mapping
+M016,R042,H005,Preventive,Task-specific PPE reduces exposure consequences during sharps handling.,Supporting,FALSE,Representative Demonstration Mapping
+M017,R043,H005,Preventive,Observed donning and doffing competency supports safe PPE use after an injury.,Supporting,FALSE,Representative Demonstration Mapping
+M018,R044,H005,Preventive,Implemented sharps controls directly reduce needlestick occurrence.,Primary,TRUE,Representative Demonstration Mapping
+M019,R034,H005,Corrective,A defined exposure-management pathway enables prompt response after needlestick injury.,Primary,TRUE,Representative Demonstration Mapping
+M020,R014,H006,Detective,Documented chain of custody supports traceable specimen identity.,Supporting,TRUE,Representative Demonstration Mapping
+M021,R018,H006,Detective,Two-identifier verification directly detects specimen identification errors.,Primary,TRUE,Representative Demonstration Mapping
+M022,R045,H006,Governance,Defined result-authorization roles reduce release of misidentified results.,Supporting,FALSE,Representative Demonstration Mapping
+M023,R046,H006,Detective,Preserved audit trails support detection and investigation of identity changes.,Supporting,FALSE,Representative Demonstration Mapping
+M024,R016,H007,Preventive,Unidirectional workflow reduces transfer of amplicons into clean PCR areas.,Primary,TRUE,Representative Demonstration Mapping
+M025,R017,H007,Detective,Defined assay controls reveal contamination affecting PCR runs.,Primary,TRUE,Representative Demonstration Mapping
+M026,R026,H007,Preventive,Validated disinfectant concentration supports effective removal of PCR contamination.,Supporting,FALSE,Representative Demonstration Mapping
+M027,R027,H007,Preventive,Specified contact times make decontamination procedures reproducible.,Supporting,FALSE,Representative Demonstration Mapping
+M028,R048,H007,Detective,Predefined quality-control criteria identify contaminated or invalid PCR runs.,Supporting,TRUE,Representative Demonstration Mapping
+M029,R020,H008,Preventive,Preventive maintenance reduces autoclave equipment malfunction.,Supporting,FALSE,Representative Demonstration Mapping
+M030,R024,H008,Mixed,Validated cycles and biological indicators prevent and detect sterilization failure.,Primary,TRUE,Representative Demonstration Mapping
+M031,R051,H008,Detective,Visible calibration status helps identify equipment unsuitable for use.,Supporting,FALSE,Representative Demonstration Mapping
+M032,R052,H008,Corrective,Available service support enables timely correction of autoclave faults.,Supporting,FALSE,Representative Demonstration Mapping
+M033,R021,H009,Recovery,Backup equipment capacity supports continued testing during power interruption.,Supporting,TRUE,Representative Demonstration Mapping
+M034,R040,H009,Mixed,UPS and generator load testing detects weaknesses and supports continuity.,Primary,TRUE,Representative Demonstration Mapping
+M035,R052,H009,Recovery,Service support helps restore failed power-dependent equipment.,Supporting,FALSE,Representative Demonstration Mapping
+M036,R022,H010,Detective,Temperature monitoring and alarms directly detect cold-chain excursions.,Primary,TRUE,Representative Demonstration Mapping
+M037,R023,H010,Recovery,Contingency storage protects materials after a temperature-control failure.,Primary,TRUE,Representative Demonstration Mapping
+M038,R036,H010,Preventive,Adequate inventory planning reduces losses caused by replacement delays.,Supporting,FALSE,Representative Demonstration Mapping
+M039,R040,H010,Recovery,Tested backup power maintains refrigeration during utility interruption.,Supporting,TRUE,Representative Demonstration Mapping
+M040,R006,H011,Preventive,Verified competency reduces incorrect PPE removal technique.,Supporting,TRUE,Representative Demonstration Mapping
+M041,R007,H011,Mixed,Documented drills reinforce response when PPE removal or exposure fails.,Indirect,FALSE,Representative Demonstration Mapping
+M042,R042,H011,Preventive,Task-specific PPE selection supports a doffing sequence suited to the work.,Supporting,FALSE,Representative Demonstration Mapping
+M043,R043,H011,Preventive,Observed donning and doffing competency directly controls doffing error.,Primary,TRUE,Representative Demonstration Mapping
+M044,R031,H012,Preventive,Least-privilege access reduces unauthorized modification or deletion of data.,Primary,TRUE,Representative Demonstration Mapping
+M045,R032,H012,Recovery,Tested restoration demonstrates that lost data can be recovered.,Primary,TRUE,Representative Demonstration Mapping
+M046,R045,H012,Governance,Defined authorization roles restrict who can approve or change results.,Supporting,FALSE,Representative Demonstration Mapping
+M047,R046,H012,Detective,Preserved audit trails reveal unauthorized data modification.,Supporting,TRUE,Representative Demonstration Mapping
+M048,R011,H013,Preventive,Valid BSC certification supports containment during an internal spill.,Primary,TRUE,Representative Demonstration Mapping
+M049,R013,H013,Corrective,Accessible spill materials enable immediate containment and cleanup.,Primary,TRUE,Representative Demonstration Mapping
+M050,R026,H013,Corrective,Validated disinfectant concentration supports effective spill decontamination.,Supporting,TRUE,Representative Demonstration Mapping
+M051,R027,H013,Corrective,Specified contact times support effective spill cleanup.,Supporting,FALSE,Representative Demonstration Mapping
+M052,R033,H013,Governance,Incident-notification procedures ensure the spill is escalated and documented.,Supporting,FALSE,Representative Demonstration Mapping
+M053,R012,H014,Mixed,Glovebox integrity verification prevents and detects glove-barrier failure.,Primary,TRUE,Representative Demonstration Mapping
+M054,R020,H014,Preventive,Preventive maintenance reduces degradation-related glovebox failure.,Supporting,FALSE,Representative Demonstration Mapping
+M055,R021,H014,Recovery,Backup capacity supports safe shutdown after loss of glovebox integrity.,Supporting,TRUE,Representative Demonstration Mapping
+M056,R033,H014,Governance,Incident-notification procedures support escalation of containment failure.,Supporting,FALSE,Representative Demonstration Mapping
+M057,R002,H015,Governance,A defined escalation structure assigns responsibility for timely incident reporting.,Primary,TRUE,Representative Demonstration Mapping
+M058,R033,H015,Governance,Available notification procedures directly govern incident-report timing.,Primary,TRUE,Representative Demonstration Mapping
+M059,R060,H015,Corrective,Post-mission review identifies and addresses delayed reporting causes.,Supporting,FALSE,Representative Demonstration Mapping
+M060,R004,H016,Governance,Assigned roles clarify who verifies competency before deployment.,Supporting,FALSE,Representative Demonstration Mapping
+M061,R006,H016,Detective,Verified competency records directly identify unqualified staff.,Primary,TRUE,Representative Demonstration Mapping
+M062,R007,H016,Detective,Documented drills provide evidence of applied staff competency.,Supporting,FALSE,Representative Demonstration Mapping
+M063,R057,H016,Governance,The readiness review prevents deployment with incomplete competency evidence.,Primary,TRUE,Representative Demonstration Mapping
+M064,R025,H017,Preventive,Consistent segregation practices directly prevent incompatible waste mixing.,Primary,TRUE,Representative Demonstration Mapping
+M065,R049,H017,Governance,Current waste SOPs provide standardized segregation instructions.,Supporting,FALSE,Representative Demonstration Mapping
+M066,R054,H017,Detective,Two-person verification can detect segregation errors in critical waste tasks.,Supporting,FALSE,Representative Demonstration Mapping
+M067,R010,H018,Detective,Functional interlock verification directly identifies pass-box failure.,Primary,TRUE,Representative Demonstration Mapping
+M068,R020,H018,Preventive,Preventive maintenance reduces mechanical interlock failure.,Supporting,FALSE,Representative Demonstration Mapping
+M069,R051,H018,Detective,Status labeling helps identify interlock components not cleared for use.,Indirect,FALSE,Representative Demonstration Mapping
+M070,R052,H018,Corrective,Service support enables repair of a failed pass-box interlock.,Supporting,FALSE,Representative Demonstration Mapping
+M071,R036,H019,Preventive,Mission-level consumable planning directly reduces reagent stockout risk.,Primary,TRUE,Representative Demonstration Mapping
+M072,R037,H019,Recovery,Alternative suppliers support replenishment after a supply interruption.,Primary,TRUE,Representative Demonstration Mapping
+M073,R057,H019,Governance,The readiness review identifies inadequate reagent stocks before deployment.,Supporting,FALSE,Representative Demonstration Mapping
+M074,R002,H020,Governance,The escalation structure defines communication paths when primary channels fail.,Supporting,TRUE,Representative Demonstration Mapping
+M075,R039,H020,Preventive,Route and security contingency planning includes communication disruption scenarios.,Supporting,FALSE,Representative Demonstration Mapping
+M076,R041,H020,Recovery,Tested redundant communications provide an alternate field channel.,Primary,TRUE,Representative Demonstration Mapping
+M077,R055,H020,Preventive,Weather and terrain assessment identifies conditions that may disrupt communications.,Indirect,FALSE,Representative Demonstration Mapping
+M078,R028,H021,Preventive,Restricted logged access directly limits uncontrolled visitor entry.,Primary,TRUE,Representative Demonstration Mapping
+M079,R030,H021,Preventive,Controlled escorted visitor access directly addresses the hazard.,Primary,TRUE,Representative Demonstration Mapping
+M080,R002,H021,Governance,The escalation structure defines response when visitor controls are breached.,Supporting,FALSE,Representative Demonstration Mapping
+M081,R026,H022,Preventive,Validated disinfectant concentration directly controls dilution accuracy.,Primary,TRUE,Representative Demonstration Mapping
+M082,R027,H022,Preventive,Specified contact times link correct preparation to effective decontamination.,Supporting,TRUE,Representative Demonstration Mapping
+M083,R049,H022,Governance,Current preparation SOPs standardize disinfectant dilution.,Supporting,FALSE,Representative Demonstration Mapping
+M084,R054,H022,Detective,Two-person verification can detect concentration preparation errors.,Supporting,FALSE,Representative Demonstration Mapping
+M085,R035,H023,Recovery,Marked evacuation routes support safe response to a laboratory fire.,Primary,TRUE,Representative Demonstration Mapping
+M086,R040,H023,Preventive,UPS and generator testing reduces electrical overload and backup-power failure risk.,Supporting,TRUE,Representative Demonstration Mapping
+M087,R052,H023,Recovery,Available service support helps isolate and correct electrical faults.,Supporting,FALSE,Representative Demonstration Mapping
+M088,R055,H023,Preventive,Site assessment identifies environmental conditions affecting fire response.,Supporting,FALSE,Representative Demonstration Mapping
+M089,R057,H023,Governance,Pre-deployment review checks fire readiness and unresolved electrical concerns.,Supporting,TRUE,Representative Demonstration Mapping
+M090,R001,H024,Governance,Mission-specific biorisk assessment identifies residual risks requiring escalation.,Primary,TRUE,Representative Demonstration Mapping
+M091,R002,H024,Governance,A defined command structure establishes the residual-risk escalation path.,Primary,TRUE,Representative Demonstration Mapping
+M092,R003,H024,Governance,Documented stop-work authority prevents acceptance of uncontrolled residual risk.,Primary,TRUE,Representative Demonstration Mapping
+M093,R019,H024,Corrective,CAPA tracking records and follows actions for unacceptable residual risk.,Supporting,FALSE,Representative Demonstration Mapping
+M094,R057,H024,Governance,The readiness review checks whether residual risks remain unresolved.,Supporting,TRUE,Representative Demonstration Mapping
+M095,R058,H024,Governance,Formal authorization prevents deployment without documented risk acceptance.,Primary,TRUE,Representative Demonstration Mapping

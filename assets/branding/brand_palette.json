@@ -1,0 +1,22 @@
+{
+  "version": "1.0.0",
+  "colors": {
+    "navy": "#0B1F3A",
+    "teal": "#0F766E",
+    "cyan": "#0EA5E9",
+    "amber": "#D97706",
+    "red": "#B42318",
+    "green": "#168A4C",
+    "ink": "#17202A",
+    "slate": "#475569",
+    "mist": "#F1F5F9",
+    "white": "#FFFFFF"
+  },
+  "contrast_notes": {
+    "navy_on_white": "Passes WCAG AA for normal text",
+    "white_on_navy": "Passes WCAG AA for normal text",
+    "ink_on_mist": "Passes WCAG AA for normal text",
+    "teal_on_white": "Use for large text or controls; pair with text labels",
+    "amber_on_white": "Use for status chips with dark text labels"
+  }
+}

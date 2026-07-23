@@ -45,7 +45,7 @@ PAGE_LABELS = {
     "Data Validation": "Data Validation",
     "Requirements Assessment": "Requirements",
     "Hazard Register": "Hazard Register",
-    "Risk Analysis": "Risk Matrix",
+    "Risk Analysis": "Risk Matrix & Heatmap",
     "Readiness Dashboard": "Readiness Analysis",
     "Deployment Decision": "Deployment Decision",
     "Corrective Actions": "Corrective Actions",
@@ -67,9 +67,9 @@ def render_sidebar(
     if current not in PAGE_ORDER:
         current = "Home"
     with st.sidebar:
-        st.image(str(LOGO_DARK_PATH), use_container_width=True)
+        st.image(str(LOGO_DARK_PATH), width="stretch")
         st.markdown('<div class="mobra-sidebar-rule"></div>', unsafe_allow_html=True)
-        selected = st.selectbox(
+        selected = st.radio(
             "Navigation",
             PAGE_ORDER,
             index=PAGE_ORDER.index(current),

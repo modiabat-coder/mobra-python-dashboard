@@ -19,7 +19,7 @@ Release date: 2026-07-24
 ## Automated verification
 
 - Python compilation: passed.
-- Automated tests: 52 passed.
+- Automated tests: 56 passed.
 - All twelve application pages: passed Streamlit test harness.
 - CSV, XLSX, legacy XLS, and JSON import tests: passed.
 - BRI, risk boundaries, heatmap totals, axes, and decision overrides: passed.
@@ -27,6 +27,10 @@ Release date: 2026-07-24
 - Exact decision-label and grammar checks: passed.
 - Standalone report generation: passed.
 - Git whitespace validation: passed.
+- Requirement–hazard mapping: 95 validated links and 24/24 hazard coverage.
+- Restored field workbooks, printable PDFs, and resource catalogue: passed.
+- Supplementary governance and risk-acceptance logic: verified not to alter
+  the canonical 11-control failure count or Deployment Decision.
 
 ## Live interface verification
 
@@ -39,6 +43,11 @@ Release date: 2026-07-24
 - Report document overflow: none.
 - Final application browser-console errors: 0.
 - Final report browser-console errors: 0.
+- Restored navigation and analysis checks: all twelve sidebar items visible;
+  Risk Matrix & Heatmap verified with 24 hazards; requirement mapping and
+  governance sections verified in the local browser.
+- Current responsive recheck: desktop, 768 px, and 560 px; no horizontal page
+  overflow and the narrow sidebar remained collapsible.
 
 ## Scope boundary
 

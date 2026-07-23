@@ -11,6 +11,11 @@ from typing import Any
 import pandas as pd
 import streamlit as st
 
+from mobra.acceptance import (
+    RiskAcceptancePolicy,
+    apply_risk_acceptance,
+    risk_acceptance_summary,
+)
 from mobra.actions import build_corrective_actions
 from mobra.charts import (
     action_status_figure,
@@ -26,11 +31,15 @@ from mobra.config import (
     APP_DESCRIPTION,
     APP_FULL_NAME,
     APP_NAME,
+    AUTHOR_EMAIL,
+    AUTHOR_NAME,
+    DANGER_COLOR,
     DECISION_COLORS,
     DECISION_DO_NOT_DEPLOY,
     DECISION_READY,
     PRIMARY_COLOR,
     PROJECT_ROOT,
+    REPOSITORY_URL,
     RISK_COLORS,
     RISK_LEVELS,
     RISK_RANGES,
@@ -38,7 +47,18 @@ from mobra.config import (
     UPLOADED_DATA_LABEL,
     count_phrase,
 )
+from mobra.critical_controls import (
+    assess_critical_controls,
+    critical_control_summary_table,
+    validate_critical_control_profile,
+)
 from mobra.decisions import decision_risk_column, deployment_decision
+from mobra.educational_media import (
+    educational_media_package,
+    load_educational_media,
+    media_summary,
+)
+from mobra.help_content import help_topics, render_help
 from mobra.io import (
     auto_detect_excel_sheet,
     list_excel_sheets,
@@ -46,6 +66,25 @@ from mobra.io import (
     read_json_collections,
     source_name,
     split_unified_file,
+)
+from mobra.mapping import (
+    hazard_mapping_ranking,
+    mapping_coverage_summary,
+    mapping_coverage_table,
+    requirement_mapping_ranking,
+    validate_mapping,
+)
+from mobra.manuscript import manuscript_download_bytes, manuscript_metadata
+from mobra.operational_tools import (
+    build_backup_zip,
+    build_field_assessment_package,
+    build_hazard_import_template,
+    build_hazard_pdf,
+    build_hazard_register_workbook,
+    build_orl_assessment_workbook,
+    build_orl_pdf,
+    build_requirements_import_template,
+    template_catalogue_csv,
 )
 from mobra.readiness import (
     calculate_bri,
@@ -60,6 +99,12 @@ from mobra.reporting import (
     make_html_report,
     summary_payload,
 )
+from mobra.resources import (
+    catalogue_csv_bytes,
+    catalogue_xlsx_bytes,
+    load_normative_resources,
+    resource_catalogue_frame,
+)
 from mobra.risk import assert_heatmap_total, heatmap_total, valid_hazard_count
 from mobra.validation import (
     HAZARD_REQUIRED_FIELDS,
@@ -71,6 +116,10 @@ from mobra.validation import (
     validate_requirements,
     validation_issue_table,
 )
+from mobra.validation_findings import (
+    findings_frame,
+    validate_cross_dataset_consistency,
+)
 from ui.components import (
     render_decision_banner,
     render_empty_state,
@@ -81,7 +130,12 @@ from ui.components import (
     render_step,
     render_validation_alert,
 )
-from ui.state import navigate_to, set_active_data
+from ui.state import (
+    active_supporting_data,
+    navigate_to,
+    set_active_data,
+    set_supporting_data,
+)
 
 
 @dataclass
@@ -170,6 +224,344 @@ def _analysis_gate(context: AssessmentContext) -> bool:
     return False
 
 
+def _supporting_results(context: AssessmentContext) -> tuple[Any, Any]:
+    """Validate optional supporting datasets without altering canonical scores."""
+    supporting = active_supporting_data()
+    mapping_result = validate_mapping(
+        supporting.get("mapping_raw", pd.DataFrame()),
+        context.requirements,
+        context.hazards,
+    )
+    profile_result = validate_critical_control_profile(
+        supporting.get("critical_profile_raw", pd.DataFrame()),
+        context.requirements,
+    )
+    return mapping_result, profile_result
+
+
+def _render_supporting_data_import(context: AssessmentContext) -> None:
+    """Import the preserved mapping and critical-control governance datasets."""
+    supporting = active_supporting_data()
+    with st.expander(
+        "Advanced supporting data · requirement–hazard mapping and governance profile",
+        expanded=False,
+    ):
+        st.caption(
+            "These optional datasets restore relationship analysis and governance detail. "
+            "They never replace the canonical BRI, Risk Score, failed Critical Control count, "
+            "or Deployment Decision."
+        )
+        source_columns = st.columns(2)
+        with source_columns[0]:
+            st.markdown(
+                f"**Active mapping:** `{supporting.get('mapping_filename', 'Not loaded')}`"
+            )
+            mapping_file = st.file_uploader(
+                "Upload requirement–hazard mapping",
+                type=["csv", "xlsx", "xls", "json"],
+                key="supporting_mapping_upload",
+            )
+        with source_columns[1]:
+            st.markdown(
+                "**Active governance profile:** "
+                f"`{supporting.get('critical_profile_filename', 'Not loaded')}`"
+            )
+            profile_file = st.file_uploader(
+                "Upload Critical Control governance profile",
+                type=["csv", "xlsx", "xls", "json"],
+                key="supporting_profile_upload",
+            )
+        if not mapping_file and not profile_file:
+            return
+        try:
+            mapping = (
+                read_data_file(mapping_file)
+                if mapping_file
+                else supporting.get("mapping_raw", pd.DataFrame())
+            )
+            profile = (
+                read_data_file(profile_file)
+                if profile_file
+                else supporting.get("critical_profile_raw", pd.DataFrame())
+            )
+            mapping_result = validate_mapping(
+                mapping,
+                context.requirements,
+                context.hazards,
+            )
+            profile_result = validate_critical_control_profile(
+                profile,
+                context.requirements,
+            )
+        except (ValueError, TypeError) as exc:
+            st.error(f"Supporting data could not be read: {exc}")
+            return
+        render_metric_grid(
+            [
+                ("Mapping Rows", len(mapping_result.data), "Relationship records"),
+                (
+                    "Mapping Errors",
+                    len(mapping_result.errors),
+                    "Must be reviewed",
+                    DANGER_COLOR if mapping_result.errors else PRIMARY_COLOR,
+                ),
+                ("Profile Rows", len(profile_result.data), "Governance records"),
+                (
+                    "Profile Errors",
+                    len(profile_result.errors),
+                    "Must be reviewed",
+                    DANGER_COLOR if profile_result.errors else PRIMARY_COLOR,
+                ),
+            ]
+        )
+        if st.button(
+            "Activate Supporting Data",
+            type="primary",
+            disabled=bool(mapping_result.errors or profile_result.errors),
+            width="stretch",
+        ):
+            set_supporting_data(
+                mapping,
+                profile,
+                mapping_filename=source_name(mapping_file)
+                if mapping_file
+                else supporting.get("mapping_filename", "mapping"),
+                critical_profile_filename=source_name(profile_file)
+                if profile_file
+                else supporting.get("critical_profile_filename", "critical_profile"),
+            )
+            st.success("Supporting mapping and governance data are active.")
+            st.rerun()
+
+
+def _render_mapping_analysis(context: AssessmentContext) -> None:
+    """Render preserved many-to-many requirement–hazard relationship analysis."""
+    mapping_result, _ = _supporting_results(context)
+    mapping = mapping_result.data
+    render_section_header(
+        "Requirement–Hazard Mapping",
+        icon="↔",
+        help_text=(
+            "Relationship analysis is supplementary and does not alter BRI, Risk Scores, "
+            "or the Deployment Decision."
+        ),
+    )
+    if mapping.empty:
+        render_empty_state(
+            "No mapping data are active",
+            "Open Data Import and load the optional requirement–hazard mapping dataset.",
+            icon="↔",
+        )
+        return
+    coverage = mapping_coverage_summary(
+        mapping,
+        context.requirements,
+        context.hazards,
+    )
+    render_metric_grid(
+        [
+            ("Mapping Links", coverage["mapping_links"], "Validated relationships"),
+            (
+                "Hazard Coverage",
+                f"{coverage['hazard_coverage_pct']:.1f}%",
+                f"{coverage['hazards_mapped']} of {coverage['hazards_total']}",
+            ),
+            (
+                "Requirement Coverage",
+                f"{coverage['requirement_coverage_pct']:.1f}%",
+                f"{coverage['requirements_mapped']} of {coverage['requirements_total']}",
+            ),
+            ("Critical Links", coverage["critical_links"], "Priority relationships"),
+        ]
+    )
+    coverage_tab, hazard_tab, requirement_tab, findings_tab = st.tabs(
+        [
+            "Coverage",
+            "Hazard Link Ranking",
+            "Requirement Link Ranking",
+            "Mapping Findings",
+        ]
+    )
+    with coverage_tab:
+        st.dataframe(
+            mapping_coverage_table(
+                mapping,
+                context.requirements,
+                context.hazards,
+            ),
+            width="stretch",
+            hide_index=True,
+        )
+    with hazard_tab:
+        st.dataframe(
+            hazard_mapping_ranking(mapping, context.hazards),
+            width="stretch",
+            hide_index=True,
+            height=420,
+        )
+    with requirement_tab:
+        st.dataframe(
+            requirement_mapping_ranking(mapping, context.requirements),
+            width="stretch",
+            hide_index=True,
+            height=420,
+        )
+    with findings_tab:
+        finding_data = findings_frame(mapping_result.findings)
+        if finding_data.empty:
+            st.success("No blocking mapping findings were detected.")
+        else:
+            st.dataframe(finding_data, width="stretch", hide_index=True)
+            st.download_button(
+                "Download Mapping Findings",
+                csv_bytes(finding_data),
+                "MOBRA_Mapping_Findings.csv",
+                "text/csv",
+                width="stretch",
+            )
+
+
+def _render_critical_control_governance(context: AssessmentContext) -> None:
+    """Render profile detail while preserving the canonical 11-control outcome."""
+    _, profile_result = _supporting_results(context)
+    render_section_header(
+        "Critical Control Governance",
+        icon="◆",
+        help_text=(
+            "The governance profile adds classification and approval detail. "
+            "The canonical failed Critical Control calculation remains non-bypassable."
+        ),
+    )
+    if profile_result.data.empty:
+        render_empty_state(
+            "No governance profile is active",
+            "Open Data Import and load the optional Critical Control governance profile.",
+            icon="◆",
+        )
+        return
+    assessment = assess_critical_controls(context.requirements, profile_result.data)
+    canonical_failed = failed_critical_controls(context.requirements)
+    failed_ids = set(
+        canonical_failed.get("requirement_id", pd.Series(dtype="string"))
+        .astype(str)
+        .str.strip()
+    )
+    governance = assessment.data.copy()
+    governance["canonical_failed_critical_control"] = (
+        governance.get("requirement_id", pd.Series(dtype="string"))
+        .astype(str)
+        .str.strip()
+        .isin(failed_ids)
+    )
+    render_metric_grid(
+        [
+            (
+                "Failed Critical Controls",
+                len(canonical_failed),
+                "Canonical deployment blockers",
+                DANGER_COLOR,
+            ),
+            (
+                "Evidence Deficiencies",
+                len(assessment.evidence_deficiencies),
+                "Governance review",
+            ),
+            (
+                "Manual Review Items",
+                len(assessment.manual_review_items),
+                "Human decision required",
+            ),
+            (
+                "Formal Approval Required",
+                int(governance.get("formal_approval_required", pd.Series(dtype=bool)).sum()),
+                "Governance workflow",
+            ),
+        ]
+    )
+    st.error(
+        f"The active assessment contains {len(canonical_failed)} failed Critical Controls. "
+        "Supplementary profile classifications cannot reduce or bypass this result."
+    )
+    display_columns = [
+        "requirement_id",
+        "domain",
+        "requirement",
+        "criticality_level",
+        "minimum_acceptable_score",
+        "observed_score",
+        "evidence_status",
+        "approval_status",
+        "canonical_failed_critical_control",
+        "requires_manual_review",
+        "formal_approval_required",
+        "critical_control_reason",
+    ]
+    st.dataframe(
+        governance[[column for column in display_columns if column in governance.columns]],
+        width="stretch",
+        hide_index=True,
+        height=460,
+    )
+    with st.expander("Governance summary download", expanded=False):
+        st.download_button(
+            "Download Governance Summary",
+            csv_bytes(critical_control_summary_table(assessment)),
+            "MOBRA_Critical_Control_Governance_Summary.csv",
+            "text/csv",
+            width="stretch",
+        )
+
+
+def _render_risk_acceptance(context: AssessmentContext) -> None:
+    """Render provisional acceptance analysis without changing the fixed decision."""
+    render_section_header(
+        "Risk Acceptance and Approval",
+        icon="✓",
+        help_text=(
+            "This is a supplementary governance view. Fixed risk bands and the "
+            "non-bypassable Deployment Decision remain authoritative."
+        ),
+    )
+    policy = RiskAcceptancePolicy()
+    assessed = apply_risk_acceptance(context.hazards, policy)
+    summary = risk_acceptance_summary(assessed, policy)
+    counts = summary.get("acceptance_status_counts", {})
+    render_metric_grid(
+        [
+            ("Acceptable", counts.get("Acceptable", 0), "Low-risk disposition"),
+            (
+                "Monitoring",
+                counts.get("Acceptable with monitoring", 0),
+                "Moderate-risk disposition",
+            ),
+            ("Conditional", counts.get("Conditional", 0), "High-risk review"),
+            (
+                "Unacceptable",
+                counts.get("Unacceptable", 0),
+                "Extreme risk remains blocking",
+                DANGER_COLOR,
+            ),
+        ]
+    )
+    acceptance_columns = [
+        "hazard_id",
+        "hazard",
+        "decision_risk_score",
+        "decision_risk_category",
+        "decision_risk_source",
+        "risk_acceptance_status",
+        "acceptance_action_required",
+        "formal_approval_required",
+        "acceptance_reason",
+    ]
+    st.dataframe(
+        assessed[[column for column in acceptance_columns if column in assessed.columns]],
+        width="stretch",
+        hide_index=True,
+        height=440,
+    )
+
+
 def _risk_category_style(value: object) -> str:
     color = RISK_COLORS.get(str(value))
     if not color:
@@ -250,7 +642,7 @@ def render_home(context: AssessmentContext) -> None:
     else:
         st.plotly_chart(
             domain_figure(context.domains),
-            use_container_width=True,
+            width="stretch",
             key="home_domain_readiness",
         )
         least = context.domains.nsmallest(3, "readiness_pct")
@@ -271,13 +663,13 @@ def render_home(context: AssessmentContext) -> None:
         with left:
             st.plotly_chart(
                 risk_counts_figure(context.hazards),
-                use_container_width=True,
+            width="stretch",
                 key="home_risk_distribution",
             )
         with right:
             st.plotly_chart(
                 top_hazards_figure(context.hazards, limit=7),
-                use_container_width=True,
+            width="stretch",
                 key="home_top_hazards",
             )
 
@@ -307,7 +699,7 @@ def render_home(context: AssessmentContext) -> None:
             ]
             st.dataframe(
                 failed[essential].head(12),
-                use_container_width=True,
+            width="stretch",
                 hide_index=True,
                 height=330,
             )
@@ -326,7 +718,7 @@ def render_home(context: AssessmentContext) -> None:
         ]
         st.dataframe(
             context.actions[action_columns].head(10),
-            use_container_width=True,
+            width="stretch",
             hide_index=True,
             height=330,
         )
@@ -341,7 +733,7 @@ def render_home(context: AssessmentContext) -> None:
     ]
     for column, (label, page) in zip(button_columns, destinations):
         with column:
-            if st.button(label, use_container_width=True):
+            if st.button(label, width="stretch"):
                 navigate_to(page)
 
 
@@ -400,7 +792,7 @@ def _mapping_controls(
             "required": "Required",
         }
     )
-    st.dataframe(display, use_container_width=True, hide_index=True, height=285)
+    st.dataframe(display, width="stretch", hide_index=True, height=285)
     st.caption(
         "Confidence indicates technical name matching only: 100% is an exact normalized "
         "match, 90% is a recognized alias, and 0% requires review. It does not confirm "
@@ -474,24 +866,24 @@ def _import_review(
                 hazards = st.data_editor(
                     hazards,
                     num_rows="dynamic",
-                    use_container_width=True,
+            width="stretch",
                     height=350,
                     key="import_hazard_editor",
                 )
             else:
-                st.dataframe(hazards.head(20), use_container_width=True, hide_index=True, height=350)
+                st.dataframe(hazards.head(20), width="stretch", hide_index=True, height=350)
         with right:
             st.markdown("#### Requirements")
             if editable:
                 requirements = st.data_editor(
                     requirements,
                     num_rows="dynamic",
-                    use_container_width=True,
+            width="stretch",
                     height=350,
                     key="import_requirement_editor",
                 )
             else:
-                st.dataframe(requirements.head(20), use_container_width=True, hide_index=True, height=350)
+                st.dataframe(requirements.head(20), width="stretch", hide_index=True, height=350)
     with mapping_tab:
         st.markdown("#### Hazard field mapping")
         hazard_mapping = _mapping_controls(
@@ -542,7 +934,7 @@ def _import_review(
             "Confirm data for analysis",
             type="primary",
             disabled=bool(errors),
-            use_container_width=True,
+            width="stretch",
         ):
             st.session_state.hazard_mapping = hazard_mapping
             st.session_state.requirement_mapping = requirement_mapping
@@ -595,6 +987,12 @@ def render_data_import(context: AssessmentContext) -> None:
         demo_requirements = pd.read_csv(
             PROJECT_ROOT / "sample_data" / "requirements_sample.csv"
         )
+        demo_mapping = pd.read_csv(
+            PROJECT_ROOT / "sample_data" / "requirement_hazard_mapping.csv"
+        )
+        demo_profile = pd.read_csv(
+            PROJECT_ROOT / "sample_data" / "critical_control_profile.csv"
+        )
         st.session_state.hazard_mapping = {}
         st.session_state.requirement_mapping = {}
         set_active_data(
@@ -606,8 +1004,17 @@ def render_data_import(context: AssessmentContext) -> None:
             source_kind="synthetic",
             file_size=0,
         )
+        set_supporting_data(
+            demo_mapping,
+            demo_profile,
+            mapping_filename="requirement_hazard_mapping.csv",
+            critical_profile_filename="critical_control_profile.csv",
+            source_kind="synthetic",
+        )
         st.success("Synthetic Demonstration Data restored.")
         navigate_to("Home")
+
+    _render_supporting_data_import(context)
 
     if structure == "Separate hazard and requirement files":
         upload_columns = st.columns(2)
@@ -711,7 +1118,7 @@ def render_data_import(context: AssessmentContext) -> None:
             ]
         )
         st.markdown("#### Detected JSON structure")
-        st.dataframe(structure, use_container_width=True, hide_index=True)
+        st.dataframe(structure, width="stretch", hide_index=True)
         paths = list(json_collections)
 
         def mapping_score(path: str, kind: str) -> int:
@@ -835,7 +1242,7 @@ def render_data_validation(context: AssessmentContext) -> None:
             filtered = filtered[match.any(axis=1)]
         st.dataframe(
             filtered,
-            use_container_width=True,
+            width="stretch",
             hide_index=True,
             height=420,
         )
@@ -844,7 +1251,7 @@ def render_data_validation(context: AssessmentContext) -> None:
             with st.expander(str(dataset), expanded=errors > 0):
                 st.dataframe(
                     issues.loc[issues["dataset"].eq(dataset)],
-                    use_container_width=True,
+            width="stretch",
                     hide_index=True,
                 )
     st.download_button(
@@ -852,8 +1259,55 @@ def render_data_validation(context: AssessmentContext) -> None:
         csv_bytes(issues),
         "MOBRA_Validation_Report.csv",
         "text/csv",
-        use_container_width=True,
+        width="stretch",
     )
+    mapping_result, profile_result = _supporting_results(context)
+    cross_result = validate_cross_dataset_consistency(
+        context.hazards,
+        context.requirements,
+        mapping_result.data,
+        profile_result.data,
+    )
+    structured = findings_frame(
+        [
+            *mapping_result.findings,
+            *profile_result.findings,
+            *cross_result.findings,
+        ]
+    )
+    render_section_header(
+        "Structured Cross-Dataset Findings",
+        icon="↔",
+        help_text=(
+            "Checks identifiers, relationship coverage, governance-profile references, "
+            "and possible duplicates across active datasets."
+        ),
+    )
+    if structured.empty:
+        st.success("No structured cross-dataset findings were detected.")
+    else:
+        structured_severity = st.multiselect(
+            "Structured finding severity",
+            ["Error", "Warning", "Information"],
+            default=["Error", "Warning", "Information"],
+            key="structured_validation_severity",
+        )
+        structured_filtered = structured[
+            structured["severity"].isin(structured_severity)
+        ]
+        st.dataframe(
+            structured_filtered,
+            width="stretch",
+            hide_index=True,
+            height=440,
+        )
+        st.download_button(
+            "Download Structured Findings",
+            csv_bytes(structured),
+            "MOBRA_Structured_Validation_Findings.csv",
+            "text/csv",
+            width="stretch",
+        )
 
 
 def render_requirements_assessment(context: AssessmentContext) -> None:
@@ -951,7 +1405,7 @@ def render_requirements_assessment(context: AssessmentContext) -> None:
     ]
     st.dataframe(
         filtered[[column for column in columns if column in filtered.columns]],
-        use_container_width=True,
+            width="stretch",
         hide_index=True,
         height=460,
         column_config={
@@ -999,6 +1453,8 @@ def render_requirements_assessment(context: AssessmentContext) -> None:
             st.markdown(
                 f"**Responsible / Target**  \n{record.get('responsible_person', '—')} · {record.get('due_date', '—')}"
             )
+    _render_mapping_analysis(context)
+    _render_critical_control_governance(context)
 
 
 def render_hazard_register(context: AssessmentContext) -> None:
@@ -1098,7 +1554,7 @@ def render_hazard_register(context: AssessmentContext) -> None:
     )
     st.dataframe(
         styled,
-        use_container_width=True,
+            width="stretch",
         hide_index=True,
         height=480,
     )
@@ -1187,7 +1643,7 @@ def render_risk_analysis(context: AssessmentContext) -> None:
     render_section_header("Risk Category Distribution", icon="▥")
     st.plotly_chart(
         risk_counts_figure(hazards),
-        use_container_width=True,
+            width="stretch",
         key="risk_distribution",
     )
     st.caption("The distribution uses the approved MOBRA risk thresholds and calculated initial Risk Scores.")
@@ -1199,7 +1655,7 @@ def render_risk_analysis(context: AssessmentContext) -> None:
     ):
         st.plotly_chart(
             initial_residual_figure(hazards),
-            use_container_width=True,
+            width="stretch",
             key="initial_residual_risk",
         )
         st.caption("Compare the number of hazards in each category before and after documented controls.")
@@ -1214,7 +1670,7 @@ def render_risk_analysis(context: AssessmentContext) -> None:
     if _meaningful(hazards["domain"]).any():
         st.plotly_chart(
             hazards_by_domain_figure(hazards),
-            use_container_width=True,
+            width="stretch",
             key="hazards_by_domain",
         )
         st.caption("Operational domains with larger hazard volumes may require concentrated control review.")
@@ -1222,7 +1678,7 @@ def render_risk_analysis(context: AssessmentContext) -> None:
     render_section_header("Top High-Risk Hazards", icon="!")
     st.plotly_chart(
         top_hazards_figure(hazards),
-        use_container_width=True,
+            width="stretch",
         key="top_high_risk_hazards",
     )
     st.caption("Ranking is based on calculated initial Risk Score; inspect residual values before deciding control adequacy.")
@@ -1250,7 +1706,7 @@ def render_risk_analysis(context: AssessmentContext) -> None:
         else:
             st.plotly_chart(
                 heatmap_figure(hazards),
-                use_container_width=True,
+            width="stretch",
                 key="risk_heatmap",
             )
             st.markdown(
@@ -1266,6 +1722,7 @@ def render_risk_analysis(context: AssessmentContext) -> None:
                 "assigned to that combination. "
                 f"Verified total: {count_phrase(actual, 'hazard')}."
             )
+    _render_risk_acceptance(context)
 
 
 def render_readiness_dashboard(context: AssessmentContext) -> None:
@@ -1282,7 +1739,7 @@ def render_readiness_dashboard(context: AssessmentContext) -> None:
     with left:
         st.plotly_chart(
             bri_progress_figure(context.bri),
-            use_container_width=True,
+            width="stretch",
             key="readiness_bri",
         )
         st.caption(
@@ -1311,7 +1768,7 @@ def render_readiness_dashboard(context: AssessmentContext) -> None:
         return
     st.plotly_chart(
         domain_figure(context.domains),
-        use_container_width=True,
+            width="stretch",
         key="readiness_domains",
     )
     st.caption(
@@ -1458,7 +1915,7 @@ def render_deployment_decision(context: AssessmentContext) -> None:
     else:
         st.dataframe(
             blockers,
-            use_container_width=True,
+            width="stretch",
             hide_index=True,
             height=360,
         )
@@ -1481,7 +1938,7 @@ def render_deployment_decision(context: AssessmentContext) -> None:
                     "status",
                 ]
             ],
-            use_container_width=True,
+            width="stretch",
             hide_index=True,
             height=380,
         )
@@ -1559,7 +2016,7 @@ def render_corrective_actions(context: AssessmentContext) -> None:
         filtered = filtered[filtered["overdue"].fillna(False)]
     st.dataframe(
         filtered,
-        use_container_width=True,
+            width="stretch",
         hide_index=True,
         height=470,
         column_config={
@@ -1572,7 +2029,7 @@ def render_corrective_actions(context: AssessmentContext) -> None:
         render_section_header("Action Status Overview", icon="▥")
         st.plotly_chart(
             action_status_figure(actions),
-            use_container_width=True,
+            width="stretch",
             key="action_status_distribution",
         )
         st.caption(
@@ -1686,7 +2143,7 @@ def render_reports_export(context: AssessmentContext) -> None:
                 download[1],
                 download[2],
                 download[3],
-                use_container_width=True,
+            width="stretch",
             )
     row_two = st.columns(4)
     data_downloads = [
@@ -1722,11 +2179,175 @@ def render_reports_export(context: AssessmentContext) -> None:
                 download[1],
                 download[2],
                 download[3],
-                use_container_width=True,
+            width="stretch",
             )
     st.caption(
         "The Excel workbook includes Executive Summary, Domain Summary, Requirements, "
         "Hazard Register, Risk Matrix, Critical Controls, Corrective Actions, and Validation Issues worksheets."
+    )
+    render_section_header("Advanced Analysis Exports", icon="↔")
+    mapping_result, profile_result = _supporting_results(context)
+    governance = assess_critical_controls(
+        context.requirements,
+        profile_result.data,
+    )
+    accepted_hazards = apply_risk_acceptance(
+        context.hazards,
+        RiskAcceptancePolicy(),
+    )
+    advanced_downloads = [
+        (
+            "Mapping CSV",
+            csv_bytes(mapping_result.data),
+            "MOBRA_Requirement_Hazard_Mapping.csv",
+        ),
+        (
+            "Mapping Coverage CSV",
+            csv_bytes(
+                mapping_coverage_table(
+                    mapping_result.data,
+                    context.requirements,
+                    context.hazards,
+                )
+            ),
+            "MOBRA_Mapping_Coverage.csv",
+        ),
+        (
+            "Governance Assessment CSV",
+            csv_bytes(governance.data),
+            "MOBRA_Critical_Control_Assessment.csv",
+        ),
+        (
+            "Risk Acceptance CSV",
+            csv_bytes(accepted_hazards),
+            "MOBRA_Risk_Acceptance.csv",
+        ),
+    ]
+    for column, download in zip(st.columns(4), advanced_downloads):
+        with column:
+            st.download_button(
+                f"Download {download[0]}",
+                download[1],
+                download[2],
+                "text/csv",
+                width="stretch",
+            )
+
+    render_section_header("Field and Import Tools", icon="⇩")
+    field_downloads = [
+        (
+            "Field Assessment Package",
+            build_field_assessment_package(
+                context.requirements,
+                context.hazards,
+            ),
+            "MOBRA_Field_Assessment_Package.xlsx",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        ),
+        (
+            "ORL Workbook",
+            build_orl_assessment_workbook(context.requirements),
+            "MOBRA_Printable_ORL_Assessment_Form.xlsx",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        ),
+        (
+            "Hazard Workbook",
+            build_hazard_register_workbook(context.hazards),
+            "MOBRA_Printable_Hazard_Register.xlsx",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        ),
+        (
+            "Requirements Template",
+            build_requirements_import_template(),
+            "MOBRA_Requirements_Import_Template.xlsx",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        ),
+        (
+            "Hazard Template",
+            build_hazard_import_template(),
+            "MOBRA_Hazard_Import_Template.xlsx",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        ),
+        (
+            "Printable ORL PDF",
+            build_orl_pdf(context.requirements),
+            "MOBRA_Printable_ORL_Assessment_Form.pdf",
+            "application/pdf",
+        ),
+        (
+            "Printable Hazard PDF",
+            build_hazard_pdf(context.hazards),
+            "MOBRA_Printable_Hazard_Register.pdf",
+            "application/pdf",
+        ),
+        (
+            "Template Catalogue",
+            template_catalogue_csv(),
+            "MOBRA_Template_Catalogue.csv",
+            "text/csv",
+        ),
+    ]
+    field_columns = st.columns(4)
+    for index, download in enumerate(field_downloads):
+        with field_columns[index % 4]:
+            st.download_button(
+                f"Download {download[0]}",
+                download[1],
+                download[2],
+                download[3],
+                width="stretch",
+                key=f"field_download_{index}",
+            )
+
+    render_section_header("Normative Resource Catalogue", icon="□")
+    try:
+        resources = load_normative_resources()
+        resource_downloads = [
+            (
+                "Resource Catalogue CSV",
+                catalogue_csv_bytes(resources),
+                "MOBRA_Normative_Resources.csv",
+                "text/csv",
+            ),
+            (
+                "Resource Catalogue XLSX",
+                catalogue_xlsx_bytes(resources),
+                "MOBRA_Normative_Resources.xlsx",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            ),
+        ]
+        for column, download in zip(st.columns(2), resource_downloads):
+            with column:
+                st.download_button(
+                    f"Download {download[0]}",
+                    download[1],
+                    download[2],
+                    download[3],
+                    width="stretch",
+                )
+    except ValueError as exc:
+        st.warning(f"Resource catalogue unavailable: {exc}")
+    render_section_header("Derived Assessment Backup", icon="⇩")
+    backup = build_backup_zip(
+        {
+            "MOBRA_Assessment_Report.html": html.encode("utf-8"),
+            "MOBRA_Assessment_Export.xlsx": workbook,
+            "MOBRA_Assessment_Summary.json": json_bytes(payload),
+            "MOBRA_Hazard_Register.csv": csv_bytes(context.hazards),
+            "MOBRA_Requirements.csv": csv_bytes(context.requirements),
+            "MOBRA_Validation_Report.csv": csv_bytes(issues),
+        }
+    )
+    st.download_button(
+        "Download Derived Assessment Backup (ZIP)",
+        backup,
+        "MOBRA_Derived_Assessment_Backup.zip",
+        "application/zip",
+        width="stretch",
+    )
+    st.caption(
+        "The backup contains selected derived outputs and SHA-256 checksums. "
+        "Original uploaded files and local secrets are excluded."
     )
     render_section_header("HTML Report Preview", icon="□")
     st.components.v1.html(html, height=780, scrolling=True)
@@ -1791,6 +2412,14 @@ def render_methodology(context: AssessmentContext) -> None:
     for term, definition in terms.items():
         with st.expander(term):
             st.write(definition)
+    render_section_header("Contextual Help", icon="?")
+    st.caption(
+        "Concise explanations preserved from the original MOBRA workflow."
+    )
+    help_columns = st.columns(2)
+    for index, topic in enumerate(help_topics()):
+        with help_columns[index % 2]:
+            render_help(topic, st)
 
 
 def render_about(context: AssessmentContext) -> None:
@@ -1839,6 +2468,120 @@ def render_about(context: AssessmentContext) -> None:
     st.info(
         "No external source listed above is currently connected. A future connection must be explicitly implemented, documented, and validated."
     )
+    render_section_header("Educational Media", icon="▣")
+    try:
+        media = load_educational_media()
+        summary = media_summary(media)
+        media_preview, media_details = st.columns([1.1, 1.9])
+        with media_preview:
+            st.image(
+                str(PROJECT_ROOT / media[0]["png_path"]),
+                caption=media[0]["title"],
+                width="stretch",
+            )
+        with media_details:
+            st.markdown(
+                f"**{summary['educational_media_count']} original MOBRA educational posters** "
+                "are available in SVG, PNG, and printable PDF formats."
+            )
+            st.dataframe(
+                pd.DataFrame(media)[
+                    [
+                        "media_id",
+                        "title",
+                        "topic",
+                        "educational_status",
+                        "last_updated",
+                    ]
+                ],
+                width="stretch",
+                hide_index=True,
+                height=330,
+            )
+            st.download_button(
+                "Download Educational Media Package (ZIP)",
+                educational_media_package(media),
+                "MOBRA_Educational_Media_Package.zip",
+                "application/zip",
+                width="stretch",
+            )
+        st.caption(
+            "These are original MOBRA educational summaries. Referenced organizations "
+            "do not endorse, certify, approve, or validate the application."
+        )
+    except ValueError as exc:
+        st.warning(f"Educational media unavailable: {exc}")
+
+    render_section_header("Research Manuscript", icon="□")
+    manuscript = manuscript_metadata()
+    if manuscript["manuscript_download_enabled"]:
+        manuscript_columns = st.columns(3)
+        manuscript_columns[0].metric(
+            "Pages",
+            manuscript["manuscript_page_count"] or "N/A",
+        )
+        manuscript_columns[1].metric(
+            "File Size",
+            _file_size_label(manuscript["manuscript_size_bytes"]),
+        )
+        manuscript_columns[2].metric(
+            "Author",
+            manuscript["manuscript_author"],
+        )
+        st.info(manuscript["manuscript_version_note"])
+        st.download_button(
+            "Download MOBRA Research Manuscript (PDF)",
+            manuscript_download_bytes(),
+            manuscript["manuscript_filename"],
+            "application/pdf",
+            width="stretch",
+        )
+    else:
+        st.warning("The research manuscript is not available in this deployment.")
+    render_section_header("Normative Evidence Catalogue", icon="□")
+    try:
+        resource_frame = resource_catalogue_frame(load_normative_resources())
+        resource_columns = [
+            "resource_id",
+            "title",
+            "issuing_organization",
+            "edition",
+            "publication_year",
+            "topic",
+            "official_page_url",
+            "access_type",
+            "redistribution_status",
+            "current_status",
+        ]
+        st.dataframe(
+            resource_frame[
+                [column for column in resource_columns if column in resource_frame.columns]
+            ],
+            width="stretch",
+            hide_index=True,
+            height=420,
+            column_config={
+                "official_page_url": st.column_config.LinkColumn(
+                    "Official Source",
+                    display_text="Open official page",
+                )
+            },
+        )
+        st.caption(
+            "Links identify source material and do not imply endorsement, certification, "
+            "accreditation, or scientific validation by an issuing organization."
+        )
+    except ValueError as exc:
+        st.warning(f"Resource catalogue unavailable: {exc}")
+
+    render_section_header("Project and Contact", icon="↗")
+    contact_columns = st.columns(3)
+    with contact_columns[0]:
+        st.markdown(f"**Author**  \n{AUTHOR_NAME}")
+    with contact_columns[1]:
+        st.markdown(f"**Contact**  \n[{AUTHOR_EMAIL}](mailto:{AUTHOR_EMAIL})")
+    with contact_columns[2]:
+        st.markdown(f"**Source repository**  \n[GitHub]({REPOSITORY_URL})")
     render_section_header("Current Assessment Context", icon="□")
     st.json(
         {

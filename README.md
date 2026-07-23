@@ -8,6 +8,10 @@ MOBRA supports technical verification, prototype testing, and external-data comp
 
 ![MOBRA executive dashboard](assets/screenshots/home_dashboard.png)
 
+The reconciliation of the visually refined interface with the preserved
+advanced functions is documented in
+[FUNCTION_PRESERVATION_MATRIX.md](FUNCTION_PRESERVATION_MATRIX.md).
+
 ## Installation and local run
 
 On Windows PowerShell:
@@ -33,23 +37,36 @@ If `py` is unavailable, use `python -m venv .venv`. The application normally ope
 6. Review automatic Column Mapping confidence and set any required overrides.
 7. Validate required fields, scales, identifiers, dates, scores, and evidence.
 8. Explicitly confirm the analysis copy.
-9. Review Requirements, Hazards, Risk Analysis, Readiness, Deployment Decision, and Corrective Actions.
-10. Generate branded CSV, XLSX, JSON, and HTML exports.
+9. Optionally load the requirement–hazard mapping and Critical Control
+   governance profile under **Advanced supporting data**.
+10. Review Requirements, Hazards, Risk Matrix & Heatmap, Readiness,
+    Deployment Decision, and Corrective Actions.
+11. Generate branded CSV, XLSX, JSON, HTML, mapping, governance, acceptance,
+    field-workbook, printable-PDF, and resource-catalogue outputs.
 
 The original source file is never overwritten.
 
 ## Pages
 
 - **Home** — executive status, Deployment Decision, KPIs, domain readiness, risk, Critical Controls, and priority actions.
-- **Data Import** — guided file selection, upload, worksheet choice, preview, mapping, validation, and confirmation.
-- **Data Validation** — grouped errors, warnings, information, search, and downloadable validation report.
-- **Requirements Assessment** — readiness, Critical Controls, Objective Evidence, filters, and focused requirement detail.
+- **Data Import** — guided file selection, upload, worksheet choice, preview,
+  column mapping, validation, confirmation, and optional relationship/governance
+  supporting data.
+- **Data Validation** — grouped errors, warnings, information, structured
+  cross-dataset findings, search, and downloadable validation reports.
+- **Requirements Assessment** — readiness, Critical Controls, Objective
+  Evidence, requirement–hazard coverage/rankings, governance detail, filters,
+  and focused requirement detail.
 - **Hazard Register** — initial/residual risk, filters, ownership, status, controls, and focused hazard detail.
-- **Risk Analysis** — category distribution, initial/residual comparison, domain concentration, top hazards, and verified matrix.
+- **Risk Matrix & Heatmap** — category distribution, initial/residual
+  comparison, domain concentration, top hazards, verified 5 × 5 matrix, and
+  supplementary risk-acceptance review.
 - **Readiness Dashboard** — compact Overall BRI, weighted domain readiness, and least-ready-domain priorities.
 - **Deployment Decision** — primary reasons, blockers, required actions, owners, dates, and reassessment conditions.
 - **Corrective Actions** — priority, owner, target date, status, overdue flag, and completion evidence.
-- **Reports and Export** — branded HTML report, structured Excel workbook, JSON summary, and CSV outputs.
+- **Reports and Export** — branded HTML report, structured Excel workbook,
+  JSON/CSV outputs, advanced analysis exports, field workbooks, printable PDFs,
+  import templates, and normative resource catalogues.
 - **Methodology** — fixed formulas, thresholds, terms, and decision rules.
 - **About MOBRA** — identity, validation boundary, scope, and future-data compatibility.
 
@@ -232,7 +249,7 @@ The suite covers:
 - Demonstration invariants: 24 hazards, 86.7% BRI, 11 failed Critical Controls, and DO NOT DEPLOY.
 - Default and every-page Streamlit smoke tests.
 
-Current verification result: **52 tests passed**. Live browser checks cover all twelve
+Current verification result: **56 tests passed**. Live browser checks cover all twelve
 pages plus 1440×900, 1280×720, 1024×768, 820 px, and 768 px application
 viewports. The standalone report is also checked at desktop, 820 px, and 560 px.
 

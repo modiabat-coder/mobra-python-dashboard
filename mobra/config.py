@@ -7,9 +7,36 @@ from pathlib import Path
 
 APP_NAME = "MOBRA"
 APP_FULL_NAME = "Mobile Operational Biosecurity Readiness Assessment"
+APP_TITLE = f"{APP_NAME} — {APP_FULL_NAME}"
+APP_VERSION = "1.0.0"
+AUTHOR_NAME = "Mohammad Ahmad Yousef E'Diabat"
+AUTHOR_EMAIL = "modiabat@gmail.com"
+REPOSITORY_URL = "https://github.com/modiabat-coder/mobra-python-dashboard"
+LIVE_APP_URL = "https://mobra-biosecurity-lab.streamlit.app/"
+MANUSCRIPT_FILENAME = "MOBRA_Manuscript.pdf"
+MANUSCRIPT_SHA256 = "8dbcf4e3c1017144fbd0f4fb415398f87f5665d8fce4f106b2a18354aaac22f5"
+MANUSCRIPT_VERSION_NOTE = (
+    "The manuscript documents the research framework and an earlier synthetic "
+    "demonstration. The deployed application has subsequently undergone "
+    "additional software development, governance refinement, validation-rule "
+    "expansion, and interface updates. Numerical demonstration outputs in the "
+    "manuscript may therefore differ from the current application."
+)
 APP_DESCRIPTION = (
     "Scientific decision support for mobile laboratory biosecurity, "
     "operational readiness, risk assessment, and deployment governance."
+)
+
+FULL_DISCLAIMER = (
+    "MOBRA is an experimental research and decision-support prototype intended "
+    "for computational verification, methodology illustration, education, and "
+    "structured assessment support. It does not constitute legal, regulatory, "
+    "clinical, medical, safety, security, accreditation, certification, or "
+    "operational advice. It does not replace applicable laws, institutional "
+    "policies, authorized biosafety and biosecurity professionals, competent "
+    "authorities, or accountable decision-makers. All scores, classifications, "
+    "thresholds, mappings, and deployment recommendations require review and "
+    "approval by qualified institutional personnel before operational use."
 )
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
