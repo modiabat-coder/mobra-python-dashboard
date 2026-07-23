@@ -2,11 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Iterable
-
 import numpy as np
 import pandas as pd
-
 
 RISK_LEVELS = ["Low", "Moderate", "High", "Extreme"]
 RISK_CATEGORIES = {
@@ -60,11 +57,17 @@ def calculate_risk_score(likelihood: pd.Series, consequence: pd.Series) -> pd.Se
 
 def heatmap_counts(hazards: pd.DataFrame) -> pd.DataFrame:
     """Return a complete 5x5 count matrix for valid hazard records."""
+    empty_matrix = pd.DataFrame(0, index=[5, 4, 3, 2, 1], columns=[1, 2, 3, 4, 5], dtype=int)
     if not {"likelihood", "consequence"}.issubset(hazards.columns):
-        return pd.DataFrame(0, index=[5, 4, 3, 2, 1], columns=[1, 2, 3, 4, 5], dtype=int)
-    valid = hazards[
-        hazards["likelihood"].map(valid_scale) & hazards["consequence"].map(valid_scale)
-    ].copy()
+        return empty_matrix
+    valid_mask = hazards["likelihood"].map(valid_scale).astype(bool) & hazards["consequence"].map(valid_scale).astype(
+        bool
+    )
+    if "inherent_risk_eligible" in hazards.columns:
+        valid_mask &= hazards["inherent_risk_eligible"].fillna(False).astype(bool)
+    valid = hazards.loc[valid_mask, ["consequence", "likelihood"]]
+    if valid.empty:
+        return empty_matrix
     matrix = pd.crosstab(valid["consequence"].astype(int), valid["likelihood"].astype(int))
     return matrix.reindex(index=[5, 4, 3, 2, 1], columns=[1, 2, 3, 4, 5], fill_value=0).astype(int)
 
@@ -78,7 +81,8 @@ def assert_heatmap_total(hazards: pd.DataFrame) -> None:
     """Raise an assertion error if matrix counts do not match valid rows."""
     valid_count = 0
     if {"likelihood", "consequence"}.issubset(hazards.columns):
-        valid_count = int(
-            (hazards["likelihood"].map(valid_scale) & hazards["consequence"].map(valid_scale)).sum()
-        )
+        valid = hazards["likelihood"].map(valid_scale) & hazards["consequence"].map(valid_scale)
+        if "inherent_risk_eligible" in hazards.columns:
+            valid &= hazards["inherent_risk_eligible"].fillna(False).astype(bool)
+        valid_count = int(valid.sum())
     assert heatmap_total(hazards) == valid_count

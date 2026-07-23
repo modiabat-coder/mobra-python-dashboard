@@ -13,6 +13,8 @@ def _valid_requirements(requirements: pd.DataFrame) -> pd.DataFrame:
     valid &= requirements["maximum_score"] > 0
     valid &= requirements["observed_score"] >= 0
     valid &= requirements["observed_score"] <= requirements["maximum_score"]
+    if "bri_eligible" in requirements.columns:
+        valid &= requirements["bri_eligible"].fillna(False).astype(bool)
     return requirements.loc[valid]
 
 
@@ -33,7 +35,11 @@ def domain_readiness(requirements: pd.DataFrame) -> pd.DataFrame:
         valid["domain"] = "General"
     result = (
         valid.groupby("domain", dropna=False)
-        .agg(observed_score=("observed_score", "sum"), maximum_score=("maximum_score", "sum"), requirement_count=("domain", "size"))
+        .agg(
+            observed_score=("observed_score", "sum"),
+            maximum_score=("maximum_score", "sum"),
+            requirement_count=("domain", "size"),
+        )
         .reset_index()
     )
     if result.empty:
@@ -43,24 +49,25 @@ def domain_readiness(requirements: pd.DataFrame) -> pd.DataFrame:
     return result.sort_values("readiness_pct", ascending=True).reset_index(drop=True)
 
 
-def failed_critical_controls(requirements: pd.DataFrame) -> pd.DataFrame:
-    """Return critical controls below their accepted threshold or incomplete."""
-    if "critical_control" not in requirements.columns:
-        return requirements.iloc[0:0].copy()
-    flags = requirements["critical_control"]
-    if flags.dtype == bool:
-        parsed_flags = flags.fillna(False)
-    else:
-        parsed_flags = flags.astype("string").str.strip().str.lower().isin(["true", "1", "yes", "y", "critical"])
-    critical = requirements[parsed_flags].copy()
-    if critical.empty:
-        return critical
-    threshold = critical.get("critical_threshold", critical["maximum_score"])
-    failed = critical["observed_score"].isna() | critical["maximum_score"].isna()
-    failed |= critical["observed_score"] < threshold.fillna(critical["maximum_score"])
-    if "incomplete" in critical.columns:
-        failed |= critical["incomplete"].fillna(False).astype(bool)
-    return critical.loc[failed]
+def failed_critical_controls(
+    requirements: pd.DataFrame,
+    critical_profile: pd.DataFrame | None = None,
+) -> pd.DataFrame:
+    """Backward-compatible wrapper around structured critical-control assessment."""
+    from .critical_controls import assess_critical_controls, legacy_critical_control_profile
+
+    assessment_requirements = requirements.copy()
+    if "requirement_id" not in assessment_requirements.columns:
+        assessment_requirements.insert(
+            0,
+            "requirement_id",
+            [f"R{i:03d}" for i in range(1, len(assessment_requirements) + 1)],
+        )
+    profile = (
+        critical_profile if critical_profile is not None else legacy_critical_control_profile(assessment_requirements)
+    )
+    assessment = assess_critical_controls(assessment_requirements, profile)
+    return assessment.deployment_blocking_failures
 
 
 def data_quality_summary(hazards: pd.DataFrame, requirements: pd.DataFrame) -> dict[str, int | float]:

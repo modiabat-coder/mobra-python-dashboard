@@ -1,0 +1,31 @@
+"""Critical-control profile and governance tests."""
+
+import pytest
+
+from .cases_logic import (
+    test_conditional_gap_caps_ready_without_automatic_block as test_conditional_gap_caps_ready_without_automatic_block,
+)
+from .cases_logic import (
+    test_critical_control_profile_has_exact_complete_coverage_and_valid_thresholds as test_critical_control_profile_has_exact_complete_coverage_and_valid_thresholds,
+)
+from .cases_logic import (
+    test_critical_profile_validation_detects_missing_rationale_and_invalid_governance as test_critical_profile_validation_detects_missing_rationale_and_invalid_governance,
+)
+from .cases_logic import (
+    test_critical_profile_validation_detects_missing_unknown_and_duplicate_ids as test_critical_profile_validation_detects_missing_unknown_and_duplicate_ids,
+)
+from .cases_logic import (
+    test_deployment_blocking_missing_evidence_is_separate_from_score_and_blocks as test_deployment_blocking_missing_evidence_is_separate_from_score_and_blocks,
+)
+from .cases_logic import (
+    test_deployment_blocking_score_failure_overrides_high_bri as test_deployment_blocking_score_failure_overrides_high_bri,
+)
+from .cases_logic import test_explicit_four_of_five_threshold_behavior as test_explicit_four_of_five_threshold_behavior
+from .cases_logic import (
+    test_important_gap_requires_correction_without_automatic_block as test_important_gap_requires_correction_without_automatic_block,
+)
+from .cases_logic import (
+    test_incomplete_record_is_separate_from_score_and_evidence as test_incomplete_record_is_separate_from_score_and_evidence,
+)
+
+pytestmark = pytest.mark.unit
