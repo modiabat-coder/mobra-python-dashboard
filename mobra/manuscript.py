@@ -7,11 +7,18 @@ import re
 from pathlib import Path
 from typing import Any
 
-from .config import (
-    AUTHOR_NAME,
-    MANUSCRIPT_FILENAME,
-    MANUSCRIPT_SHA256,
-    MANUSCRIPT_VERSION_NOTE,
+from . import config as _config
+
+# Keep startup resilient when a hosting worker briefly serves an older config
+# module during a redeploy.  The checked-in config remains the authoritative
+# source; these defaults only prevent a transient import failure.
+AUTHOR_NAME = getattr(_config, "AUTHOR_NAME", "MOBRA author")
+MANUSCRIPT_FILENAME = getattr(_config, "MANUSCRIPT_FILENAME", "MOBRA_Manuscript.pdf")
+MANUSCRIPT_SHA256 = getattr(_config, "MANUSCRIPT_SHA256", "")
+MANUSCRIPT_VERSION_NOTE = getattr(
+    _config,
+    "MANUSCRIPT_VERSION_NOTE",
+    "The manuscript is supplementary research documentation for the current prototype.",
 )
 
 MANUSCRIPT_PATH = Path(__file__).resolve().parent.parent / "docs" / MANUSCRIPT_FILENAME
