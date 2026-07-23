@@ -209,3 +209,17 @@ The included mapping is likewise representative rather than expert-validated. It
 Risk-acceptance dispositions require institutional approval and expert validation before operational use. MOBRA does not replace authorized risk acceptance by accountable institutional personnel.
 
 Critical-control classifications and thresholds are also provisional demonstration rules. They have not undergone institutional authorization, expert content-validity assessment, or operational field validation and must not be treated as universal or regulatory criteria.
+
+## Interface, operational tools, and resources
+
+The application now presents a Home/Assessment Setup workflow with Data Validation, Readiness and BRI, Hazard Analysis, Requirement–Hazard Mapping, Critical-Control Governance, Reports and Exports, and Resources and Contact areas. The introduction, “How to use this application”, “What MOBRA does not do”, contextual result explanations, refresh control, and confirmed Reset Assessment control are available in the UI.
+
+Resources can generate the current-schema printable ORL and hazard forms, blank import workbooks, a combined `MOBRA_Field_Assessment_Package.xlsx`, and paper PDFs. Handwritten PDFs require manual entry later; MOBRA does not claim OCR recognition. These forms use the existing 60 requirements and 24-hazard demonstration schemas and do not change calculations.
+
+The public author contact is **Mohammad Ahmad Yousef E'Diabat** at [modiabat@gmail.com](mailto:modiabat@gmail.com). This is not an SMTP credential and assessment results are never sent to the author automatically. Optional email backup is disabled unless SMTP secrets are explicitly configured; it requires recipient validation, consent, authorization, data-classification confirmation, and a size limit. A derived-output ZIP fallback remains available and excludes uploaded source files by default.
+
+The final approved manuscript is expected at `docs/MOBRA_Manuscript.pdf` and is not fabricated when missing. Before final production release, obtain the author-approved final manuscript PDF and place it at that path.
+
+The normative evidence base is loaded from `config/normative_resources.json`; it includes WHO LBM4, WHO laboratory biosecurity guidance, WHO rapid-response mobile-laboratory standards, the current WHO 2025–2026 transport edition, ISO 35001:2019 with Amendment 1:2024, ISO 31000:2018, ISO/TS 7446:2026, and BMBL sixth edition. Licensed ISO resources are link-only and labelled **Do not redistribute**. Supporting scientific literature is kept separately in `config/supporting_literature.json`; no publisher PDFs are bundled and no issuing-organization endorsement is claimed. See [docs/NORMATIVE_EVIDENCE_BASE.md](docs/NORMATIVE_EVIDENCE_BASE.md) for review and attribution rules.
+
+The full disclaimer appears in the Home page, Resources and Contact, generated HTML reports, PDF/Excel templates, backup packages, this README, and `TECHNICAL_REVIEW.md`. Final legal wording should be reviewed by qualified legal counsel.

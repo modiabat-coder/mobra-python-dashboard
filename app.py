@@ -20,6 +20,21 @@ from mobra.acceptance import (
     risk_acceptance_summary_table,
 )
 from mobra.charts import bri_gauge, domain_figure, heatmap_figure, mapping_sankey_figure, risk_counts_figure
+from mobra.config import (
+    APP_TITLE,
+    APP_VERSION,
+    APPLICATION_DEFINITION,
+    AUTHOR_NAME,
+    FULL_DISCLAIMER,
+    HOW_TO_USE_STEPS,
+    INTRODUCTION_COMPONENTS,
+    NON_ENDORSEMENT_STATEMENT,
+    NORMATIVE_EVIDENCE_WORDING,
+    PROTOTYPE_STATUS,
+    WHAT_MOBRA_DOES_NOT_DO,
+    application_metadata,
+    configured_author_email,
+)
 from mobra.critical_controls import (
     CONTROL_OUTCOMES,
     CRITICAL_CONTROL_LIMITATION,
@@ -54,8 +69,31 @@ from mobra.mapping import (
     requirements_without_hazards,
     validate_mapping,
 )
+from mobra.operational_tools import (
+    MAX_EMAIL_ATTACHMENT_BYTES,
+    EmailBackupError,
+    EmailConfig,
+    build_backup_zip,
+    build_field_assessment_package,
+    build_hazard_import_template,
+    build_hazard_pdf,
+    build_hazard_register_workbook,
+    build_orl_assessment_workbook,
+    build_orl_pdf,
+    build_requirements_import_template,
+    reset_assessment_state,
+    send_email_backup,
+)
 from mobra.readiness import calculate_bri, data_quality_summary, domain_readiness, failed_critical_controls
 from mobra.reporting import make_html_report
+from mobra.resources import (
+    build_open_access_reference_package,
+    catalogue_csv_bytes,
+    catalogue_xlsx_bytes,
+    load_normative_resources,
+    load_supporting_literature,
+    resource_catalogue_frame,
+)
 from mobra.risk import RISK_LEVELS, assert_heatmap_total, heatmap_total
 from mobra.validation import ValidationResult, normalise_columns, validate_hazards, validate_requirements
 from mobra.validation_exports import invalid_records_workbook_bytes, validation_json_fields, write_validation_sheets
@@ -76,7 +114,6 @@ make_heatmap = heatmap_figure
 make_bri_gauge = bri_gauge
 
 
-APP_TITLE = "MOBRA — Mobile Operational Biosecurity Readiness Assessment"
 BASE_DIR = Path(__file__).resolve().parent
 
 
@@ -231,6 +268,16 @@ def _load_inputs() -> tuple[
     with st.sidebar:
         st.header("Data input")
         mode = st.radio("Input mode", ["Included demonstration data", "Two files", "One unified file"], index=0)
+        st.subheader("Assessment metadata")
+        st.session_state["_mobra_assessment_metadata"] = {
+            "Laboratory or mission": st.text_input("Laboratory or mission", key="assessment_mission"),
+            "Location": st.text_input("Location", key="assessment_location"),
+            "Assessment date": st.date_input("Assessment date", value=None, key="assessment_date"),
+            "Assessor": st.text_input("Assessor", key="assessment_assessor"),
+            "Reviewers": st.text_input("Reviewers", key="assessment_reviewers"),
+            "Mission type": st.text_input("Mission type", key="assessment_mission_type"),
+            "Notes": st.text_area("Assessment notes", key="assessment_notes"),
+        }
         mapping_file = st.file_uploader(
             "Requirement–hazard mapping (optional override)",
             type=["csv", "xlsx", "xls"],
@@ -833,6 +880,362 @@ def _render_validation_center(
     )
 
 
+def _render_session_controls() -> None:
+    """Render non-destructive refresh and confirmed full-reset controls."""
+    with st.sidebar:
+        st.divider()
+        st.subheader("Session controls")
+        if st.button("Refresh View", use_container_width=True, key="refresh_view"):
+            st.rerun()
+        if st.button("Reset Assessment", type="secondary", use_container_width=True, key="reset_assessment"):
+            st.session_state["_mobra_reset_requested"] = True
+        if st.session_state.get("_mobra_reset_requested", False):
+            confirmed = st.checkbox(
+                "I understand this clears uploaded data, filters, metadata, email fields, and calculated outputs.",
+                key="reset_assessment_confirmation",
+            )
+            if confirmed and st.button("Confirm Reset", type="primary", use_container_width=True, key="confirm_reset"):
+                reset_assessment_state(st.session_state)
+                st.rerun()
+    if st.session_state.pop("_mobra_reset_message", False):
+        st.success("The assessment session has been reset.")
+
+
+def _secrets_mapping() -> dict[str, object]:
+    """Read Streamlit secrets defensively without exposing values in the UI."""
+    try:
+        return {str(key): value for key, value in st.secrets.items()}
+    except Exception:  # pragma: no cover - depends on hosting configuration
+        return {}
+
+
+def _render_contextual_explanations(decision: str) -> None:
+    with st.expander("What does BRI mean?", expanded=False):
+        st.write(
+            "The BRI summarizes scored readiness requirements. It does not override deployment-blocking critical-control failures."
+        )
+    with st.expander("Why is the decision DO NOT DEPLOY?", expanded=False):
+        st.write(
+            f"The current result is {decision}. This decision is generated by configured MOBRA software rules and requires review and authorization by accountable personnel."
+        )
+    with st.expander("What is inherent risk?", expanded=False):
+        st.write(
+            "Inherent risk is calculated from the original Likelihood and Consequence values before residual controls are considered."
+        )
+    with st.expander("What is residual risk?", expanded=False):
+        st.write(
+            "Residual risk is used only when a valid residual Likelihood and Consequence pair is supplied; missing residual data are never silently labelled residual risk."
+        )
+    with st.expander("Why can a high BRI still produce DO NOT DEPLOY?", expanded=False):
+        st.write(
+            "Deployment-blocking critical-control failures and configured validation or risk overrides take precedence over a high BRI."
+        )
+    with st.expander("What is a deployment-blocking control?", expanded=False):
+        st.write(
+            "It is a provisional governance profile control whose failed score, missing evidence, or incomplete record blocks an automatic deployment-ready result."
+        )
+    with st.expander("What does Conditional mean?", expanded=False):
+        st.write(
+            "Conditional indicates that corrective action, ownership, target dates, formal approval, or compensating controls are required before acceptance."
+        )
+    with st.expander("What do the Heat Map numbers represent?", expanded=False):
+        st.write(
+            "The number shown inside a cell is the count of hazards with that Likelihood–Consequence combination. The background colour represents the applicable risk category."
+        )
+    with st.expander("Why are some records excluded?", expanded=False):
+        st.write(
+            "Records with blocking validation errors remain visible but are excluded from calculations that require valid fields."
+        )
+    with st.expander("What does software validation mean?", expanded=False):
+        st.write(
+            "Passing checks confirm software-rule consistency only; they do not establish scientific, clinical, operational, regulatory, or field validation."
+        )
+
+
+def _resource_link(label: str, url: str) -> None:
+    if not url:
+        return
+    if hasattr(st, "link_button"):
+        st.link_button(label, url, use_container_width=True)
+    else:  # pragma: no cover - compatibility fallback for older Streamlit
+        st.markdown(f"[{label}]({url})")
+
+
+def _render_resources_and_contact(
+    requirements: pd.DataFrame,
+    hazards: pd.DataFrame,
+    report_html: str,
+    summary_json: bytes,
+    validation_csv: bytes,
+    critical_csv: bytes,
+    mapping_csv: bytes,
+) -> None:
+    """Render printable templates, resources, author contact, and optional email backup."""
+    st.header("Resources and Contact")
+    st.subheader("Contact the Author")
+    st.write(f"**Author:** {AUTHOR_NAME}")
+    author_email = configured_author_email()
+    if author_email:
+        st.markdown(f"**Email:** [{author_email}](mailto:{author_email}?subject=MOBRA%20Application%20Inquiry)")
+        st.caption(
+            "The author contact address is public application metadata; assessment results are never sent automatically."
+        )
+        st.code(author_email, language="text")
+    else:
+        st.info("Author contact email has not yet been configured.")
+    st.caption(
+        "Suggested subjects: Scientific feedback · Software issue · Collaboration request · Data-integration question · General inquiry."
+    )
+
+    st.subheader("Printable Assessment Forms")
+    st.write("Download, print, complete manually in the laboratory, and enter the completed values into MOBRA later.")
+    form_items = [
+        (
+            "MOBRA_Printable_ORL_Assessment_Form.xlsx",
+            "Full 60-row ORL assessment form",
+            build_orl_assessment_workbook(requirements),
+            "XLSX",
+            True,
+        ),
+        (
+            "MOBRA_Printable_ORL_Assessment_Form.pdf",
+            "Readable paper ORL form with repeated table headers",
+            build_orl_pdf(requirements),
+            "PDF",
+            False,
+        ),
+        (
+            "MOBRA_Requirements_Import_Template.xlsx",
+            "Blank supported digital ORL import template",
+            build_requirements_import_template(),
+            "XLSX",
+            True,
+        ),
+        (
+            "MOBRA_Printable_Hazard_Register.xlsx",
+            "Hazard register with assessor-selected risk fields",
+            build_hazard_register_workbook(hazards),
+            "XLSX",
+            False,
+        ),
+        (
+            "MOBRA_Printable_Hazard_Register.pdf",
+            "Readable paper hazard register",
+            build_hazard_pdf(hazards),
+            "PDF",
+            False,
+        ),
+        (
+            "MOBRA_Hazard_Import_Template.xlsx",
+            "Blank supported hazard import template",
+            build_hazard_import_template(),
+            "XLSX",
+            True,
+        ),
+        (
+            "MOBRA_Field_Assessment_Package.xlsx",
+            "Combined field package with stable sheet names",
+            build_field_assessment_package(requirements, hazards),
+            "XLSX",
+            True,
+        ),
+    ]
+    for index in range(0, len(form_items), 2):
+        columns = st.columns(2)
+        for column, item in zip(columns, form_items[index : index + 2], strict=False):
+            filename, purpose, content, file_format, reupload = item
+            with column:
+                st.markdown(f"**{filename}**")
+                st.caption(
+                    f"{purpose} · {file_format} · {'Can be re-uploaded' if reupload else 'Manual entry required'}"
+                )
+                if file_format == "XLSX":
+                    preview = pd.DataFrame(
+                        {"Field": ["Requirement ID", "Domain", "Requirement", "Observed Score", "Objective Evidence"]}
+                    )
+                else:
+                    preview = pd.DataFrame({"PDF form": ["Repeated table headers", "Writing space", "Disclaimer"]})
+                st.dataframe(preview, hide_index=True, use_container_width=True)
+                st.download_button(
+                    f"Download {filename}",
+                    content,
+                    filename,
+                    (
+                        "application/pdf"
+                        if file_format == "PDF"
+                        else "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    ),
+                    key=f"resource_form_{filename}",
+                )
+    st.info(
+        "Handwritten PDF forms require manual data entry later. MOBRA does not promise automatic OCR or handwritten-form recognition."
+    )
+
+    st.subheader("Normative Evidence Base and Scientific Resources")
+    st.write(
+        "The normative evidence base for MOBRA includes international guidance and standards relating to laboratory biosafety, laboratory biosecurity, rapid-response mobile laboratories, infectious-substance transport, biorisk management, general risk management, and biomedical laboratory biosafety practices."
+    )
+    st.caption(NORMATIVE_EVIDENCE_WORDING)
+    st.caption(NON_ENDORSEMENT_STATEMENT)
+    try:
+        resources = load_normative_resources()
+        catalogue = resource_catalogue_frame(resources)
+        organization_filter = st.multiselect(
+            "Filter by organization", sorted(catalogue["issuing_organization"].unique()), key="resource_org_filter"
+        )
+        topic_filter = st.multiselect(
+            "Filter by topic", sorted(catalogue["topic"].unique()), key="resource_topic_filter"
+        )
+        access_filter = st.multiselect(
+            "Filter by access type", sorted(catalogue["access_type"].unique()), key="resource_access_filter"
+        )
+        filtered = catalogue.copy()
+        if organization_filter:
+            filtered = filtered[filtered["issuing_organization"].isin(organization_filter)]
+        if topic_filter:
+            filtered = filtered[filtered["topic"].isin(topic_filter)]
+        if access_filter:
+            filtered = filtered[filtered["access_type"].isin(access_filter)]
+        st.dataframe(
+            filtered[
+                [
+                    "resource_id",
+                    "title",
+                    "issuing_organization",
+                    "edition",
+                    "resource_type",
+                    "access_type",
+                    "current_status",
+                ]
+            ],
+            hide_index=True,
+            use_container_width=True,
+        )
+        for resource in resources:
+            with st.expander(f"{resource['resource_id']} · {resource['title']}", expanded=False):
+                st.write(
+                    f"**Organization:** {resource['issuing_organization']} · **Edition/year:** {resource['edition']} / {resource['publication_year']}"
+                )
+                st.write(f"**Topic:** {resource['topic']}\n\n**Relevance:** {resource['relevance_to_mobra']}")
+                st.write(f"**Access:** {resource['access_type']} · **Status:** {resource['current_status']}")
+                _resource_link("Official source", resource["official_page_url"])
+                if resource["official_download_url"]:
+                    _resource_link("Official download", resource["official_download_url"])
+                else:
+                    st.caption("No authorized download is exposed; use the official source page.")
+                st.code(resource["citation"], language="text")
+                st.caption(resource["licence_or_copyright"])
+        st.download_button(
+            "Download MOBRA_Normative_Resource_Catalogue.csv",
+            catalogue_csv_bytes(resources),
+            "MOBRA_Normative_Resource_Catalogue.csv",
+            "text/csv",
+            key="normative_catalogue_csv",
+        )
+        st.download_button(
+            "Download MOBRA_Normative_Resource_Catalogue.xlsx",
+            catalogue_xlsx_bytes(resources),
+            "MOBRA_Normative_Resource_Catalogue.xlsx",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            key="normative_catalogue_xlsx",
+        )
+        st.download_button(
+            "Download MOBRA_Open_Access_Reference_Package.zip",
+            build_open_access_reference_package(resources),
+            "MOBRA_Open_Access_Reference_Package.zip",
+            "application/zip",
+            key="open_access_reference_zip",
+        )
+        st.caption(
+            f"Supporting-literature catalogue entries: {len(load_supporting_literature())}. Publisher PDFs are not bundled."
+        )
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        st.error(f"Normative resource manifest is unavailable: {exc}")
+
+    st.subheader("Research Manuscript")
+    manuscript_path = BASE_DIR / "docs" / "MOBRA_Manuscript.pdf"
+    if manuscript_path.is_file():
+        st.write("MOBRA Research Manuscript")
+        st.caption(f"Author: {AUTHOR_NAME} · File size: {manuscript_path.stat().st_size:,} bytes")
+        st.download_button(
+            "Download MOBRA Research Manuscript",
+            manuscript_path.read_bytes(),
+            "MOBRA_Manuscript.pdf",
+            "application/pdf",
+            key="manuscript_download",
+        )
+    else:
+        st.info("The final approved MOBRA research manuscript has not yet been added.")
+        st.caption(
+            "Before final production release, obtain the author-approved final manuscript PDF and place it at docs/MOBRA_Manuscript.pdf."
+        )
+
+    st.subheader("Email Backup of Assessment Results")
+    st.warning(
+        "Email transmission may leave the controlled application environment. Confirm institutional authorization, recipient identity, and data classification before sending."
+    )
+    config = EmailConfig.from_mapping(_secrets_mapping())
+    derived_files = {
+        "MOBRA_Summary.json": summary_json,
+        "MOBRA_Report.html": report_html.encode("utf-8"),
+        "MOBRA_Validation_Findings.csv": validation_csv,
+        "MOBRA_Critical_Control_Assessment.csv": critical_csv,
+        "MOBRA_Requirement_Hazard_Mapping.csv": mapping_csv,
+    }
+    st.download_button(
+        "Download MOBRA_Assessment_Backup.zip",
+        build_backup_zip(derived_files),
+        "MOBRA_Assessment_Backup.zip",
+        "application/zip",
+        key="assessment_backup_zip",
+    )
+    if not config.configured:
+        st.info(
+            "Email backup is disabled because SMTP settings are not configured. Downloadable backup packages remain available."
+        )
+    else:
+        recipient = st.text_input("Recipient email", key="backup_recipient")
+        cc = st.text_input("Optional CC email", key="backup_cc")
+        assessment_name = st.text_input("Assessment or mission name", key="backup_assessment_name")
+        selected = st.multiselect(
+            "Attachments",
+            list(derived_files),
+            default=["MOBRA_Summary.json", "MOBRA_Report.html"],
+            key="backup_attachments",
+        )
+        consent = st.checkbox(
+            "I understand the disclaimer and confirm that I am authorized to send these results.", key="backup_consent"
+        )
+        authorized = st.checkbox(
+            "I confirm that institutional authorization permits this transmission.", key="backup_authorized"
+        )
+        no_sensitive_data = st.checkbox(
+            "I confirm that no sensitive or identifiable data are included unless permitted.",
+            key="backup_data_classification",
+        )
+        if sum(len(derived_files[name]) for name in selected) > MAX_EMAIL_ATTACHMENT_BYTES:
+            st.error("The selected attachments exceed the total email-size limit.")
+        if st.button("Send selected assessment backup", key="send_backup"):
+            try:
+                send_email_backup(
+                    config,
+                    recipient=recipient,
+                    cc=cc,
+                    subject="MOBRA Application Inquiry",
+                    assessment_name=assessment_name,
+                    attachments={name: derived_files[name] for name in selected},
+                    consent=consent,
+                    authorized=authorized,
+                    no_sensitive_data=no_sensitive_data,
+                )
+                st.success("Assessment backup email sent after explicit confirmation.")
+            except EmailBackupError as exc:
+                st.error(str(exc))
+
+    st.subheader("Disclaimer and Limitation of Liability")
+    st.write(FULL_DISCLAIMER)
+
+
 def main() -> None:
     st.set_page_config(page_title=APP_TITLE, page_icon="🧬", layout="wide")
     st.markdown(
@@ -841,10 +1244,36 @@ def main() -> None:
     )
     st.title(APP_TITLE)
     st.caption(
-        "Upload laboratory hazard and ORL data, validate records, calculate risk and readiness, and export a standalone report."
+        f"{APPLICATION_DEFINITION} · Version {APP_VERSION} · {PROTOTYPE_STATUS} · Build {application_metadata()['build_identifier']}"
     )
     st.info(
         "This software is an external-dataset-based computational verification prototype and not clinical, operational, regulatory, or field validation."
+    )
+    _render_session_controls()
+    st.header("About MOBRA")
+    st.write(APPLICATION_DEFINITION)
+    st.write("It combines: " + "; ".join(INTRODUCTION_COMPONENTS) + ".")
+    with st.expander("How to use this application", expanded=False):
+        for step_number, step in enumerate(HOW_TO_USE_STEPS, start=1):
+            st.markdown(f"{step_number}. {step}")
+    with st.expander("What MOBRA does not do", expanded=False):
+        st.write("MOBRA does not replace:")
+        for item in WHAT_MOBRA_DOES_NOT_DO:
+            st.markdown(f"- {item}")
+    navigation_labels = [
+        "Home",
+        "Assessment Setup",
+        "Data Validation",
+        "Readiness and BRI",
+        "Hazard Analysis",
+        "Requirement–Hazard Mapping",
+        "Critical-Control Governance",
+        "Reports and Exports",
+        "Resources and Contact",
+    ]
+    selected_navigation = st.radio("MOBRA navigation", navigation_labels, horizontal=True, key="mobra_navigation")
+    st.caption(
+        f"Current workflow area: {selected_navigation}. Use the detailed tabs below to inspect each analysis module."
     )
     st.session_state["_mobra_file_findings"] = []
     st.session_state["_mobra_file_sheets"] = {}
@@ -1110,8 +1539,9 @@ def main() -> None:
     else:
         st.error(f"Decision: {decision}")
     st.write(" ".join(reasons))
+    _render_contextual_explanations(decision)
 
-    tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs(
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs(
         [
             "Executive dashboard",
             "Hazard analysis",
@@ -1120,6 +1550,7 @@ def main() -> None:
             "Requirement–Hazard Mapping",
             "Data Validation Center",
             "Data & exports",
+            "Resources and Contact",
         ]
     )
     with tab1:
@@ -1208,6 +1639,7 @@ def main() -> None:
                 "critical_control_limitations": CRITICAL_CONTROL_LIMITATION,
             }
         summary = {
+            **application_metadata(assessment_metadata=st.session_state.get("_mobra_assessment_metadata", {})),
             "generated_at": pd.Timestamp.now().isoformat(timespec="seconds"),
             "hazard_file": hazard_filename,
             "requirements_file": requirements_filename,
@@ -1270,6 +1702,10 @@ def main() -> None:
             validation_findings=all_findings,
             validation_summaries=validation_summaries,
             validation_reference_date=validation_reference_date,
+            author_email=configured_author_email(),
+            assessment_metadata=st.session_state.get("_mobra_assessment_metadata", {}),
+            manuscript_available=(BASE_DIR / "docs" / "MOBRA_Manuscript.pdf").is_file(),
+            email_backup_enabled=EmailConfig.from_mapping(_secrets_mapping()).configured,
         )
         st.download_button(
             "Download standalone HTML report", html.encode("utf-8"), EXPORT_FILENAMES["report"], "text/html"
@@ -1370,6 +1806,16 @@ def main() -> None:
             (BASE_DIR / "sample_data" / "requirements_template.csv").read_bytes(),
             "MOBRA_Requirements_Template.csv",
             "text/csv",
+        )
+    with tab8:
+        _render_resources_and_contact(
+            requirements,
+            hazards,
+            html,
+            json.dumps(summary, indent=2, ensure_ascii=False).encode("utf-8"),
+            csv_bytes(findings_frame(all_findings)),
+            csv_bytes(critical_assessment.data if critical_assessment is not None else pd.DataFrame()),
+            csv_bytes(mapping if mapping_ready else pd.DataFrame()),
         )
 
 

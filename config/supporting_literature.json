@@ -1,0 +1,74 @@
+{
+  "literature": [
+    {
+      "citation_id": "LIT-001",
+      "title": "Existing operational standards for field deployments of rapid response mobile laboratories: a scoping review",
+      "authors": "Hasselberg et al.",
+      "year": 2024,
+      "journal": "Frontiers in Public Health",
+      "doi": "10.3389/fpubh.2024.1455738",
+      "official_or_publisher_url": "https://doi.org/10.3389/fpubh.2024.1455738",
+      "open_access_url": "https://www.frontiersin.org/journals/public-health/articles/10.3389/fpubh.2024.1455738/full",
+      "topic": "Mobile laboratory operations",
+      "evidence_role": "Mobile laboratory operations",
+      "access_type": "Open-access scientific article",
+      "notes": "Supporting scientific literature; not a normative standard."
+    },
+    {
+      "citation_id": "LIT-002",
+      "title": "A Multilingual Tool for Standardized Laboratory Biosafety and Biosecurity Assessment and Monitoring",
+      "authors": "Orelle et al.",
+      "year": 2022,
+      "journal": "Health Security",
+      "doi": "10.1089/hs.2022.0030",
+      "official_or_publisher_url": "https://doi.org/10.1089/hs.2022.0030",
+      "open_access_url": "https://journals.sagepub.com/doi/10.1089/hs.2022.0030",
+      "topic": "Laboratory biosafety and biosecurity",
+      "evidence_role": "Validation methodology",
+      "access_type": "Open-access scientific article",
+      "notes": "Supporting scientific literature; not a normative standard."
+    },
+    {
+      "citation_id": "LIT-003",
+      "title": "Laboratory biosafety risk assessment: a critical component of avian influenza preparedness",
+      "authors": "McCluskey, Cornish, Barr, and Lim",
+      "year": 2025,
+      "journal": "Journal of Biosafety and Biosecurity",
+      "doi": "10.1016/j.jobb.2025.02.001",
+      "official_or_publisher_url": "https://doi.org/10.1016/j.jobb.2025.02.001",
+      "open_access_url": "",
+      "topic": "Risk assessment; emergency preparedness",
+      "evidence_role": "Risk assessment",
+      "access_type": "Subscription or publisher access",
+      "notes": "Supporting scientific literature; publisher access may be required."
+    },
+    {
+      "citation_id": "LIT-004",
+      "title": "Biosafety and biosecurity: a relative risk-based framework for safer, more secure, and sustainable laboratory capacity building",
+      "authors": "Dickmann et al.",
+      "year": 2015,
+      "journal": "Frontiers in Public Health",
+      "doi": "10.3389/fpubh.2015.00241",
+      "official_or_publisher_url": "https://doi.org/10.3389/fpubh.2015.00241",
+      "open_access_url": "https://www.frontiersin.org/journals/public-health/articles/10.3389/fpubh.2015.00241/full",
+      "topic": "Biosafety; biosecurity; capacity building",
+      "evidence_role": "Biorisk management",
+      "access_type": "Open-access scientific article",
+      "notes": "Supporting scientific literature; not a normative standard."
+    },
+    {
+      "citation_id": "LIT-005",
+      "title": "Strengthening mobile diagnostic resilience in emergencies in the WHO Eastern Mediterranean Region",
+      "authors": "WHO Eastern Mediterranean Region collaborators",
+      "year": 2026,
+      "journal": "Dialogues in Health",
+      "doi": "10.1016/j.dialog.2025.100269",
+      "official_or_publisher_url": "https://doi.org/10.1016/j.dialog.2025.100269",
+      "open_access_url": "https://www.sciencedirect.com/science/article/pii/S277265332500067X",
+      "topic": "Mobile laboratory operations; emergency preparedness",
+      "evidence_role": "Emergency preparedness",
+      "access_type": "Open-access scientific article",
+      "notes": "Supporting scientific literature; not a normative standard."
+    }
+  ]
+}

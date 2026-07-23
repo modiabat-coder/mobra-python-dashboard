@@ -999,6 +999,9 @@ def test_html_report_is_standalone_and_contains_required_sections() -> None:
     assert "Critical-Control Governance" in html
     assert "Deployment-blocking controls" in html
     assert "Conditional gaps" in html
+    assert "How to use this application" in html
+    assert "What MOBRA does not do" in html
+    assert "Disclaimer and Limitation of Liability" in html
     assert "Evidence deficiencies" in html
     assert "Manual-review items" in html
     assert "Appendix: Critical-Control Profile" in html
