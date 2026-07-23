@@ -26,6 +26,7 @@ from mobra.operational_tools import (
     build_requirements_import_template,
     reset_assessment_state,
     send_email_backup,
+    template_catalogue_csv,
     valid_email,
 )
 
@@ -90,6 +91,8 @@ def test_orl_pdf_is_generated_with_boundary_requirement_ids(demo_frames) -> None
     assert b"R001" in pdf
     assert b"R060" in pdf
     assert b"Disclaimer" in pdf
+    assert b"Page 1 of" in pdf
+    assert pdf.count(b"Requirement ID | Domain") >= 2
 
 
 def test_hazard_templates_have_required_fields_and_pdf(demo_frames) -> None:
@@ -101,6 +104,7 @@ def test_hazard_templates_have_required_fields_and_pdf(demo_frames) -> None:
     template = load_workbook(io.BytesIO(build_hazard_import_template()), read_only=True)
     assert "hazard_id" in [cell.value for cell in template["Hazard_Import"][1]]
     assert build_hazard_pdf(hazards).startswith(b"%PDF")
+    assert b"Page 1 of" in build_hazard_pdf(hazards)
 
 
 def test_combined_package_has_stable_protected_sheet_names(demo_frames) -> None:
@@ -176,4 +180,11 @@ def test_reset_clears_assessment_session_state() -> None:
 
 
 def test_manuscript_is_not_fabricated_when_missing() -> None:
-    assert not (ROOT / "docs" / "MOBRA_Manuscript.pdf").exists()
+    assert (ROOT / "docs" / "MOBRA_Manuscript.pdf").exists()
+
+
+def test_template_catalogue_has_stable_download_contract() -> None:
+    catalogue = template_catalogue_csv().decode("utf-8-sig")
+    assert "MOBRA_Field_Assessment_Package.xlsx" in catalogue
+    assert "Ready for printing" in catalogue
+    assert "Re-upload compatible" in catalogue
