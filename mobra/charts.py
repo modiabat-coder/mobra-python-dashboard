@@ -10,8 +10,10 @@ import plotly.graph_objects as go
 from .config import (
     ACCENT_COLOR,
     BORDER_COLOR,
+    DANGER_COLOR,
     MUTED_TEXT_COLOR,
     PRIMARY_COLOR,
+    PRIMARY_DARK,
     RISK_COLORS,
     RISK_LEVELS,
     RISK_TEXT_COLORS,
@@ -413,6 +415,94 @@ def executive_radial_gauge(
     figure.update_layout(
         height=255,
         margin={"l": 22, "r": 22, "t": 55, "b": 16},
+        paper_bgcolor=SURFACE_COLOR,
+        font={"family": "Inter, Segoe UI, Arial", "color": TEXT_COLOR},
+    )
+    return figure
+
+
+def primary_bri_dial_figure(
+    bri: float,
+    *,
+    critical_override_active: bool,
+) -> go.Figure:
+    """Render the primary BRI dial without changing deployment semantics."""
+    value = 0.0 if pd.isna(bri) else float(np.clip(bri, 0, 100))
+    if value < 50:
+        readiness = "LOW READINESS"
+    elif value < 70:
+        readiness = "LIMITED READINESS"
+    elif value < 85:
+        readiness = "MODERATE READINESS"
+    else:
+        readiness = "HIGH READINESS"
+    status = (
+        f"{readiness} — CRITICAL OVERRIDE ACTIVE"
+        if critical_override_active
+        else readiness
+    )
+    figure = go.Figure(
+        go.Indicator(
+            mode="gauge+number",
+            value=value,
+            number={
+                "suffix": "%",
+                "valueformat": ".1f",
+                "font": {"size": 48, "color": PRIMARY_COLOR},
+            },
+            title={
+                "text": "<b>BIOSECURITY READINESS INDEX</b>",
+                "font": {"size": 17, "color": PRIMARY_COLOR},
+            },
+            gauge={
+                "shape": "angular",
+                "axis": {
+                    "range": [0, 100],
+                    "tickmode": "array",
+                    "tickvals": [0, 20, 40, 60, 80, 100],
+                    "ticktext": ["0", "20", "40", "60", "80", "100"],
+                    "tickwidth": 1,
+                    "tickcolor": MUTED_TEXT_COLOR,
+                    "tickfont": {"size": 12, "color": MUTED_TEXT_COLOR},
+                },
+                "bar": {
+                    "color": PRIMARY_COLOR,
+                    "thickness": 0.22,
+                },
+                "bgcolor": "#EDF3F4",
+                "borderwidth": 1,
+                "bordercolor": BORDER_COLOR,
+                "steps": [
+                    {"range": [0, 50], "color": "#F5C9C6"},
+                    {"range": [50, 70], "color": "#F8D7B5"},
+                    {"range": [70, 85], "color": "#F9E89A"},
+                    {"range": [85, 100], "color": "#CFE8D7"},
+                ],
+                "threshold": {
+                    "line": {"color": PRIMARY_DARK, "width": 5},
+                    "thickness": 0.9,
+                    "value": value,
+                },
+            },
+            domain={"x": [0.08, 0.92], "y": [0.2, 1]},
+        )
+    )
+    figure.add_annotation(
+        x=0.5,
+        y=0.07,
+        xref="paper",
+        yref="paper",
+        text=f"<b>{status}</b>",
+        showarrow=False,
+        font={
+            "size": 13,
+            "color": DANGER_COLOR if critical_override_active else PRIMARY_COLOR,
+        },
+        align="center",
+    )
+    figure.update_layout(
+        height=355,
+        margin={"l": 24, "r": 24, "t": 62, "b": 28},
         paper_bgcolor=SURFACE_COLOR,
         font={"family": "Inter, Segoe UI, Arial", "color": TEXT_COLOR},
     )

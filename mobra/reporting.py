@@ -19,6 +19,7 @@ from .charts import (
     bri_progress_figure,
     domain_figure,
     heatmap_figure,
+    primary_bri_dial_figure,
     risk_counts_figure,
 )
 from .config import (
@@ -242,10 +243,30 @@ def make_html_report(
         hazards.get(risk_column, pd.Series(dtype=str)).eq("Extreme").sum()
     )
     top_hazards = hazards.sort_values("risk_score", ascending=False).head(10)
-    plotlyjs = "inline"
+    bri_display = "N/A" if pd.isna(bri) else f"{bri:.1f}%"
+    failed_count = len(failed)
+    if failed_count:
+        control_word = "control" if failed_count == 1 else "controls"
+        decision_note = (
+            f"Readiness score: {bri_display}. Deployment remains prohibited "
+            f"because {failed_count} mission-critical {control_word} failed."
+        )
+    else:
+        decision_note = (
+            f"Readiness score: {bri_display}. Final decision: {decision}. "
+            "The readiness category does not replace the formal Deployment Decision."
+        )
+    primary_gauge_html = primary_bri_dial_figure(
+        bri,
+        critical_override_active=failed_count > 0,
+    ).to_html(
+        full_html=False,
+        include_plotlyjs="inline",
+        config={"displayModeBar": False, "responsive": True},
+    )
     gauge_html = bri_progress_figure(bri).to_html(
         full_html=False,
-        include_plotlyjs=plotlyjs,
+        include_plotlyjs=False,
         config={"displayModeBar": False, "responsive": True},
     )
     heatmap_html = heatmap_figure(filtered).to_html(
@@ -290,10 +311,11 @@ h1,h2,h3{color:var(--primary);margin-top:0}h2{font-size:20px;border-bottom:1px s
 .report-kpi-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-bottom:18px}.metric{min-width:0;min-height:110px;background:#fff;border:1px solid var(--border);border-top:3px solid var(--secondary);border-radius:10px;padding:14px;overflow-wrap:anywhere}.metric .label{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:#627880;font-weight:700}.metric .value{font-size:26px;line-height:1.18;color:var(--primary);font-weight:800;margin-top:4px;overflow-wrap:anywhere}
 .data-label{display:inline-block;max-width:100%;border:1px solid #6fa2aa;border-radius:99px;padding:4px 10px;font-size:12px;font-weight:700;color:var(--primary);overflow-wrap:anywhere}
 .decision{border-radius:12px;padding:18px 20px;margin-bottom:18px;border:1px solid;border-left-width:8px}.decision h1{margin:0 0 5px}.decision.stop{background:#fff1f0;border-color:#b42318}.decision.stop h1{color:#b42318}.decision.conditional{background:#fff6e8;border-color:#b25e09}.decision.conditional h1{color:#9a5109}.decision.ready{background:#edf8f1;border-color:#237a45}.decision.ready h1{color:#237a45}.decision.neutral{background:#f0f4f5;border-color:#607d86}
+.report-gauge-note{display:flex;align-items:center;gap:10px;margin:4px 0 8px;padding:11px 13px;border:1px solid #e7b8b4;border-left:5px solid #b42318;border-radius:10px;background:#fff4f3}.report-gauge-note p{margin:0;font-size:13px}.report-decision-badge{display:inline-flex;flex:none;border-radius:999px;padding:5px 10px;background:#b42318;color:#fff;font-size:11px;font-weight:800;letter-spacing:.03em;white-space:nowrap}
 .table-wrap{width:100%;overflow-x:auto}.table-wrap table{border-collapse:collapse;width:100%;font-size:11px}.table-wrap th,.table-wrap td{border:1px solid #dce5e7;padding:7px;text-align:left;vertical-align:top;white-space:normal;overflow-wrap:anywhere}.table-wrap th{background:var(--primary);color:#fff;position:sticky;top:0}
 .plot{overflow:hidden;break-inside:avoid}.plot .plot-container{max-width:100%}.note,.empty{font-size:12px;color:#61767e}.risk-legend{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0 0}.risk-legend span{border:1px solid #667c84;border-radius:99px;padding:4px 9px;font-size:11px;font-weight:700}.page-break{break-before:page}.two{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:18px}footer{color:#667c84;text-align:center;font-size:11px;padding:12px 20px 26px}
 @media(max-width:900px){.report-kpi-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.two{grid-template-columns:minmax(0,1fr)}.brand{align-items:flex-start}.brand svg{width:390px}}
-@media(max-width:560px){.report-header{padding:20px}.brand{display:block}.brand-meta{text-align:left;margin-top:14px}.report-kpi-grid{grid-template-columns:minmax(0,1fr)}main{padding:14px}.section{padding:15px}.decision{padding:15px}.metric{min-height:96px}}
+@media(max-width:560px){.report-header{padding:20px}.brand{display:block}.brand-meta{text-align:left;margin-top:14px}.report-kpi-grid{grid-template-columns:minmax(0,1fr)}main{padding:14px}.section{padding:15px}.decision{padding:15px}.metric{min-height:96px}.report-gauge-note{align-items:flex-start;flex-direction:column}}
 @page{size:A4;margin:14mm}
 @media print{*{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}html,body{background:#fff}.report-header{padding:16px 0}.brand,main{max-width:none;margin:0}.brand svg{width:360px}.section,.metric,.decision{box-shadow:none;break-inside:avoid}.plot{break-inside:avoid}.page-break{break-before:page}.table-wrap{overflow:visible}.table-wrap table{font-size:8.5px;table-layout:fixed}.table-wrap th{position:static}.no-print{display:none}.risk-legend span{border-width:1.5px}}
 </style>
@@ -309,6 +331,7 @@ h1,h2,h3{color:var(--primary);margin-top:0}h2{font-size:20px;border-bottom:1px s
 <div class="metric"><div class="label">Hazards</div><div class="value">{{ hazard_count }}</div></div>
 <div class="metric"><div class="label">Failed Critical Controls</div><div class="value">{{ failed_count }}</div></div>
 </div>
+<section class="section plot"><h2>Biosecurity Readiness Index</h2>{{ primary_gauge_html }}<div class="report-gauge-note"><span class="report-decision-badge">{{ decision }}</span><p>{{ decision_note }}</p></div><p class="note">The gauge reflects the numerical BRI only. It cannot authorize deployment or bypass failed Critical Controls.</p></section>
 <section class="section"><h2>Executive Summary</h2><p>MOBRA assessed {{ requirement_count }} operational requirements and {{ hazard_count }} hazards. The Overall BRI is {{ bri_display }}. The deployment decision remains governed by Critical Controls, residual risk, critical data completeness, and required evidence; BRI alone does not authorize deployment.</p><p><strong>Data source:</strong> {{ data_source }}<br><strong>Hazard file:</strong> {{ hazard_filename }}<br><strong>Requirements file:</strong> {{ requirements_filename }}</p></section>
 <div class="two"><section class="section plot">{{ gauge_html }}</section><section class="section plot">{{ risk_html }}</section></div>
 <section class="section plot"><h2>Domain Readiness</h2>{{ domain_html }}</section>
@@ -334,12 +357,14 @@ h1,h2,h3{color:var(--primary);margin-top:0}h2{font-size:20px;border-bottom:1px s
         decision=escape(decision),
         decision_class=decision_class,
         reasons=[escape(str(reason)) for reason in reasons],
-        bri_display="N/A" if pd.isna(bri) else f"{bri:.1f}%",
+        bri_display=bri_display,
         requirement_count=len(requirements),
         hazard_count=len(hazards),
-        failed_count=len(failed),
+        failed_count=failed_count,
         hazard_filename=escape(str(hazard_filename)),
         requirements_filename=escape(str(requirements_filename)),
+        primary_gauge_html=primary_gauge_html,
+        decision_note=escape(decision_note),
         gauge_html=gauge_html,
         risk_html=risk_html,
         domain_html=domain_html,

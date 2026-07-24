@@ -25,6 +25,7 @@ from mobra.charts import (
     hazards_by_domain_figure,
     heatmap_figure,
     initial_residual_figure,
+    primary_bri_dial_figure,
     risk_counts_figure,
     top_hazards_figure,
 )
@@ -622,6 +623,52 @@ def render_home(context: AssessmentContext) -> None:
 
     render_decision_banner(context.decision, context.reasons)
     failed_count = len(failed_critical_controls(context.requirements))
+    render_section_header(
+        "Biosecurity Readiness Index",
+        icon="◔",
+        help_text=(
+            "The dial reflects the numerical BRI only. The formal Deployment "
+            "Decision and Critical Control overrides remain authoritative."
+        ),
+    )
+    with st.container(border=True):
+        st.plotly_chart(
+            primary_bri_dial_figure(
+                context.bri,
+                critical_override_active=failed_count > 0,
+            ),
+            width="stretch",
+            key="home_primary_bri_dial",
+        )
+        if failed_count:
+            control_word = "control" if failed_count == 1 else "controls"
+            decision_note = (
+                f"Readiness score: {_format_bri(context.bri)}. Deployment remains "
+                f"prohibited because {failed_count} mission-critical {control_word} failed."
+            )
+        else:
+            decision_note = (
+                f"Readiness score: {_format_bri(context.bri)}. Final decision: "
+                f"{context.decision}. The readiness category does not replace "
+                "the formal Deployment Decision."
+            )
+        st.markdown(
+            f"""
+            <div class="mobra-bri-decision-note" role="note"
+                 aria-label="BRI interpretation and final deployment decision">
+              <span class="mobra-bri-decision-badge"
+                    style="--badge-color:{escape(DECISION_COLORS.get(context.decision, PRIMARY_COLOR))}">
+                {escape(context.decision)}
+              </span>
+              <p>{escape(decision_note)}</p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        st.caption(
+            "The gauge visualizes weighted readiness only. It cannot authorize "
+            "deployment or bypass failed Critical Controls."
+        )
     risk_basis = decision_risk_column(context.hazards)
     critical_flags = context.requirements.get(
         "critical_control",

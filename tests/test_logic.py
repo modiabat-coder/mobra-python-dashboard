@@ -27,7 +27,11 @@ from mobra.educational_media import (
     educational_media_package,
     load_educational_media,
 )
-from mobra.charts import executive_radial_gauge, heatmap_figure
+from mobra.charts import (
+    executive_radial_gauge,
+    heatmap_figure,
+    primary_bri_dial_figure,
+)
 from mobra.io import list_excel_sheets, read_data_file, read_json_collections
 from mobra.mapping import mapping_coverage_summary, validate_mapping
 from mobra.manuscript import manuscript_is_current, manuscript_metadata
@@ -334,6 +338,14 @@ def test_html_report_is_standalone_and_contains_required_sections() -> None:
     assert "Synthetic Demonstration Data" in html
     assert '<header class="report-header">' in html
     assert '<div class="report-kpi-grid">' in html
+    assert "BIOSECURITY READINESS INDEX" in html
+    assert "HIGH READINESS \\u2014 CRITICAL OVERRIDE ACTIVE" in html
+    assert '<div class="report-gauge-note">' in html
+    assert (
+        "Readiness score: 86.7%. Deployment remains prohibited because "
+        "11 mission-critical controls failed."
+        in html
+    )
     assert "@page{size:A4" in html
     assert "@media(max-width:900px)" in html
     assert "@media(max-width:560px)" in html
@@ -438,6 +450,25 @@ def test_executive_radial_gauges_are_context_only_and_bounded() -> None:
     assert readiness.data[0].gauge.axis.range == (0, 100)
     assert readiness.data[0].gauge.steps[0].range == (0, 50)
     assert risk_load.data[0].gauge.steps[0].range == (0, 25)
+
+
+def test_primary_bri_dial_has_verified_value_ticks_zones_and_override() -> None:
+    figure = primary_bri_dial_figure(
+        86.7,
+        critical_override_active=True,
+    )
+    indicator = figure.data[0]
+    assert indicator.value == pytest.approx(86.7)
+    assert indicator.title.text == "<b>BIOSECURITY READINESS INDEX</b>"
+    assert tuple(indicator.gauge.axis.tickvals) == (0, 20, 40, 60, 80, 100)
+    assert [tuple(step.range) for step in indicator.gauge.steps] == [
+        (0, 50),
+        (50, 70),
+        (70, 85),
+        (85, 100),
+    ]
+    assert indicator.gauge.threshold.value == pytest.approx(86.7)
+    assert "HIGH READINESS — CRITICAL OVERRIDE ACTIVE" in figure.layout.annotations[0].text
 
 
 def test_synthetic_mission_map_reflects_non_bypassable_decision() -> None:

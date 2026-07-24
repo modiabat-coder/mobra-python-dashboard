@@ -453,6 +453,36 @@ def apply_global_styles() -> None:
             line-height: 1.2;
             border: 1px solid currentColor;
         }}
+        .mobra-bri-decision-note {{
+            display: flex;
+            align-items: center;
+            gap: .8rem;
+            margin: .15rem 0 .55rem;
+            padding: .82rem .95rem;
+            border: 1px solid #E7B8B4;
+            border-left: 5px solid var(--mobra-danger);
+            border-radius: 10px;
+            background: #FFF4F3;
+        }}
+        .mobra-bri-decision-note p {{
+            margin: 0;
+            color: var(--mobra-text);
+            font-size: .91rem;
+        }}
+        .mobra-bri-decision-badge {{
+            display: inline-flex;
+            flex: none;
+            align-items: center;
+            border: 1px solid var(--badge-color);
+            border-radius: 999px;
+            padding: .3rem .65rem;
+            background: var(--badge-color);
+            color: #FFFFFF;
+            font-size: .76rem;
+            font-weight: 800;
+            letter-spacing: .025em;
+            white-space: nowrap;
+        }}
         .mobra-decision {{
             border-radius: var(--mobra-radius-lg);
             border: 1px solid color-mix(in srgb, var(--decision-color) 35%, white);
@@ -543,6 +573,11 @@ def apply_global_styles() -> None:
                 font-size: 1.55rem !important;
             }}
             .mobra-login-brand {{ margin-top: 0; }}
+            .mobra-bri-decision-note {{
+                align-items: flex-start;
+                flex-direction: column;
+                gap: .55rem;
+            }}
         }}
         @media print {{
             [data-testid="stSidebar"], [data-testid="stHeader"] {{ display:none !important; }}
