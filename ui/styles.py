@@ -308,9 +308,22 @@ def apply_global_styles() -> None:
         }}
         .mobra-hero-meta strong {{ color: var(--mobra-primary); }}
         .mobra-login-brand {{
-            margin: .2rem 0 1rem;
-            padding-top: .75rem;
+            margin: .2rem 0 .8rem;
+            padding-top: .9rem;
             border-top: 4px solid var(--mobra-secondary);
+            text-align: center;
+        }}
+        .mobra-login-lock {{
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 2.6rem;
+            height: 2.6rem;
+            border-radius: 50%;
+            background: #E6F2F2;
+            color: var(--mobra-secondary);
+            font-size: 1.05rem;
+            line-height: 1;
         }}
         .mobra-login-brand h2 {{
             margin: .3rem 0 0;
@@ -320,6 +333,22 @@ def apply_global_styles() -> None:
             margin: .2rem 0 1.15rem;
             text-align: center;
             color: var(--mobra-muted);
+        }}
+        .mobra-login-assurance {{
+            display: grid;
+            gap: .16rem;
+            margin-top: .85rem;
+            padding: .72rem .82rem;
+            border: 1px solid var(--mobra-border);
+            border-radius: var(--mobra-radius-sm);
+            background: var(--mobra-surface-alt);
+            color: var(--mobra-muted);
+            font-size: .79rem;
+            line-height: 1.4;
+        }}
+        .mobra-login-assurance strong {{
+            color: var(--mobra-primary);
+            font-size: .82rem;
         }}
         .mobra-map-legend {{
             display: flex;

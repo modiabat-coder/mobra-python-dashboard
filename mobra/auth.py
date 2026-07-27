@@ -14,6 +14,7 @@ from typing import Any, Mapping
 import streamlit as st
 
 from .config import APP_FULL_NAME, APP_NAME, LOGO_PATH
+from ui.components import render_logo
 
 PBKDF2_ALGORITHM = "sha256"
 PBKDF2_ITERATIONS = 600_000
@@ -158,7 +159,7 @@ def authentication_gate(config: AuthConfig | None = None) -> bool:
         _, center, _ = st.columns([1, 1.35, 1])
         with center, st.container(border=True):
             if Path(LOGO_PATH).is_file():
-                st.image(str(LOGO_PATH), width="stretch")
+                render_logo(width=520)
             st.error(
                 "Authentication is enabled but not fully configured. Add the "
                 "username and PBKDF2 password hash to Streamlit Secrets."
@@ -172,23 +173,34 @@ def authentication_gate(config: AuthConfig | None = None) -> bool:
     with center:
         with st.container(border=True):
             if Path(LOGO_PATH).is_file():
-                st.image(str(LOGO_PATH), width="stretch")
+                render_logo(width=520)
             st.markdown(
-                f'<div class="mobra-login-brand"><h2>Secure access</h2>'
+                f'<div class="mobra-login-brand">'
+                '<div class="mobra-login-lock" aria-hidden="true">◆</div>'
+                "<h2>Authorized access</h2>"
                 f"<p>{APP_NAME} · {APP_FULL_NAME}</p></div>",
                 unsafe_allow_html=True,
+            )
+            st.caption(
+                "Enter the username and password assigned by the MOBRA administrator."
             )
             with st.form("mobra_login_form", clear_on_submit=False):
                 username = st.text_input(
                     "Username",
+                    key="mobra_login_username",
+                    max_chars=128,
                     autocomplete="username",
                     placeholder="Enter your MOBRA username",
+                    help="Use the username assigned to your authorized account.",
                 )
                 password = st.text_input(
                     "Password",
+                    key="mobra_login_password",
                     type="password",
+                    max_chars=256,
                     autocomplete="current-password",
                     placeholder="Enter your password",
+                    help="Your password is masked and is not written to assessment data.",
                 )
                 submitted = st.form_submit_button(
                     "Sign in",
@@ -208,9 +220,14 @@ def authentication_gate(config: AuthConfig | None = None) -> bool:
                     st.rerun()
                 else:
                     st.error("Invalid username or password.")
-            st.caption(
-                "Credentials are configured only through Streamlit Secrets or "
-                "deployment environment variables."
+            st.markdown(
+                """
+                <div class="mobra-login-assurance">
+                  <strong>Protected session</strong>
+                  <span>Credentials are verified securely and are never added to assessment records.</span>
+                </div>
+                """,
+                unsafe_allow_html=True,
             )
     return False
 

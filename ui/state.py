@@ -12,6 +12,10 @@ import streamlit as st
 from mobra.config import PROJECT_ROOT, SYNTHETIC_DATA_LABEL
 
 
+PENDING_PAGE_KEY = "mobra_pending_page"
+SCROLL_TO_TOP_KEY = "mobra_scroll_to_top"
+
+
 def initialize_session_state() -> None:
     """Load the clearly labelled synthetic demonstration dataset on first run."""
     hazards_path = PROJECT_ROOT / "sample_data" / "hazards_sample.csv"
@@ -102,5 +106,6 @@ def set_supporting_data(
 
 def navigate_to(page: str) -> None:
     """Set the requested page and rerun the application."""
-    st.session_state.active_page = page
+    st.session_state[PENDING_PAGE_KEY] = page
+    st.session_state[SCROLL_TO_TOP_KEY] = True
     st.rerun()

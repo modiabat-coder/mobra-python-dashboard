@@ -14,6 +14,7 @@ from mobra.config import (
 )
 from mobra.validation import ValidationResult
 from ui.components import render_logo
+from ui.state import PENDING_PAGE_KEY, SCROLL_TO_TOP_KEY
 
 
 PAGE_GROUPS = {
@@ -67,6 +68,12 @@ def render_sidebar(
     requirement_result: ValidationResult,
 ) -> str:
     """Render concise navigation and the active-dataset summary."""
+    if st.session_state.pop("mobra_refresh_notice", False):
+        st.toast("View refreshed. Assessment data preserved.", icon="🔄")
+    pending_page = st.session_state.pop(PENDING_PAGE_KEY, None)
+    if pending_page in PAGE_ORDER:
+        st.session_state.active_page = pending_page
+        st.session_state.mobra_navigation = pending_page
     current = st.session_state.get("active_page", "Home")
     if current not in PAGE_ORDER:
         current = "Home"
@@ -80,6 +87,8 @@ def render_sidebar(
             format_func=lambda page: f"{PAGE_ICONS[page]}  {PAGE_LABELS[page]}",
             key="mobra_navigation",
         )
+        if selected != current:
+            st.session_state[SCROLL_TO_TOP_KEY] = True
         st.session_state.active_page = selected
         st.markdown('<div class="mobra-sidebar-rule"></div>', unsafe_allow_html=True)
         st.markdown("#### Active dataset")
@@ -120,6 +129,17 @@ def render_sidebar(
             st.warning(f"Validation: Passed with {count_phrase(warnings, 'warning')}")
         else:
             st.success("Validation: Passed")
+        if st.button(
+            "↻ Refresh View",
+            key="mobra_refresh_view",
+            width="stretch",
+            help="Rerun the interface without clearing the active assessment.",
+        ):
+            st.session_state.mobra_view_refreshed_at = datetime.now().isoformat(
+                timespec="microseconds"
+            )
+            st.session_state.mobra_refresh_notice = True
+            st.rerun()
         st.markdown('<div class="mobra-sidebar-rule"></div>', unsafe_allow_html=True)
         st.caption(f"{APP_NAME} \u00b7 Scientific decision support")
         st.caption("Synthetic data are always labelled and never represented as operational evidence.")
