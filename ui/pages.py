@@ -54,7 +54,11 @@ from mobra.critical_controls import (
     critical_control_summary_table,
     validate_critical_control_profile,
 )
-from mobra.decisions import decision_risk_column, deployment_decision
+from mobra.decisions import (
+    decision_risk_basis,
+    decision_risk_values,
+    deployment_decision,
+)
 from mobra.educational_media import (
     educational_media_package,
     load_educational_media,
@@ -669,7 +673,7 @@ def render_home(context: AssessmentContext) -> None:
             "The gauge visualizes weighted readiness only. It cannot authorize "
             "deployment or bypass failed Critical Controls."
         )
-    risk_basis = decision_risk_column(context.hazards)
+    decision_risks = decision_risk_values(context.hazards)
     critical_flags = context.requirements.get(
         "critical_control",
         pd.Series(False, index=context.requirements.index),
@@ -690,9 +694,7 @@ def render_home(context: AssessmentContext) -> None:
         else 0.0
     )
     elevated_count = int(
-        context.hazards.get(risk_basis, pd.Series(dtype="string"))
-        .isin(["High", "Extreme"])
-        .sum()
+        decision_risks.isin(["High", "Extreme"]).sum()
     )
     elevated_load = (
         100 * elevated_count / len(context.hazards)
@@ -743,7 +745,7 @@ def render_home(context: AssessmentContext) -> None:
         )
         st.caption(
             f"{elevated_count}/{len(context.hazards)} hazards are High or Extreme "
-            f"using {risk_basis.replace('_', ' ')}."
+            f"using {decision_risk_basis(context.hazards).lower()}."
         )
     st.info(
         "Indicator colors support rapid review only. The formal result remains "
@@ -751,9 +753,7 @@ def render_home(context: AssessmentContext) -> None:
         "non-bypassable deployment rules."
     )
 
-    residual_extreme = int(
-        context.hazards.get(risk_basis, pd.Series(dtype="string")).eq("Extreme").sum()
-    )
+    decision_extreme = int(decision_risks.eq("Extreme").sum())
     assessed = int(context.requirements.get("observed_score", pd.Series()).notna().sum())
     evidence_complete = int(
         (~context.requirements.get("evidence_missing", pd.Series(False, index=context.requirements.index))).sum()
@@ -775,7 +775,12 @@ def render_home(context: AssessmentContext) -> None:
         ("Overall BRI", _format_bri(context.bri), "Weighted observed ÷ maximum score", PRIMARY_COLOR),
         ("Requirements Assessed", f"{assessed}/{len(context.requirements)}", "Operational readiness records", PRIMARY_COLOR),
         ("Total Hazards", len(context.hazards), "Structurally valid imported records", PRIMARY_COLOR),
-        ("Extreme Residual Risks", residual_extreme, f"Using {risk_basis.replace('_', ' ')}", RISK_COLORS["Extreme"]),
+        (
+            "Decision-basis Extreme Risks",
+            decision_extreme,
+            decision_risk_basis(context.hazards),
+            RISK_COLORS["Extreme"],
+        ),
         ("Failed Critical Controls", failed_count, "Non-bypassable deployment blockers", DECISION_COLORS[DECISION_DO_NOT_DEPLOY]),
         ("Open Corrective Actions", open_actions, "Not completed or closed", RISK_COLORS["High"]),
         ("Data Completeness", f"{max(0, data_completeness):.1f}%", f"Evidence complete: {evidence_complete}/{len(context.requirements)}", PRIMARY_COLOR),
@@ -1125,7 +1130,7 @@ def render_data_import(context: AssessmentContext) -> None:
     st.info(
         "Minimum hazard fields: Hazard, Likelihood, Consequence. "
         "Minimum requirement fields: Requirement, Observed Score, Maximum Score. "
-        "Supported formats are CSV, XLSX, XLS, and JSON; JSON files are limited to 50 MB."
+        "Supported formats are CSV, XLSX, XLS, and JSON; every file is limited to 50 MB."
     )
     structure = st.radio(
         "1. Select file structure",
@@ -1762,10 +1767,9 @@ def render_risk_analysis(context: AssessmentContext) -> None:
         return
     hazards = context.hazards
     risk_counts = hazards["risk_category"].value_counts()
-    risk_basis = decision_risk_column(hazards)
-    residual_extreme = int(
-        hazards.get(risk_basis, pd.Series(dtype="string")).eq("Extreme").sum()
-    )
+    decision_risks = decision_risk_values(hazards)
+    decision_basis = decision_risk_basis(hazards)
+    decision_extreme = int(decision_risks.eq("Extreme").sum())
     average = hazards["risk_score"].mean()
     metrics = [
         ("Total Hazards", len(hazards), "Valid risk records"),
@@ -1773,7 +1777,7 @@ def render_risk_analysis(context: AssessmentContext) -> None:
         ("Moderate", int(risk_counts.get("Moderate", 0)), "Scores 5–9"),
         ("High", int(risk_counts.get("High", 0)), "Scores 10–16"),
         ("Extreme", int(risk_counts.get("Extreme", 0)), "Scores 17–25"),
-        ("Residual Extreme", residual_extreme, f"Decision basis: {risk_basis.replace('_', ' ')}"),
+        ("Decision-basis Extreme", decision_extreme, decision_basis),
         ("Average Risk Score", f"{average:.1f}" if pd.notna(average) else "N/A", "Initial calculated score"),
     ]
     render_metric_grid(
@@ -1985,9 +1989,9 @@ def _blocking_issues(context: AssessmentContext) -> pd.DataFrame:
                 "Target Date": row.get("due_date", "Not provided"),
             }
         )
-    risk_column = decision_risk_column(context.hazards)
+    decision_risks = decision_risk_values(context.hazards)
     extreme = context.hazards[
-        context.hazards.get(risk_column, pd.Series(dtype="string")).eq("Extreme")
+        decision_risks.eq("Extreme")
     ]
     for _, row in extreme.iterrows():
         records.append(
@@ -2024,11 +2028,11 @@ def render_deployment_decision(context: AssessmentContext) -> None:
             st.markdown(f"- {reason}")
         st.markdown(f"**Overall BRI:** {_format_bri(context.bri)}")
         st.markdown(
-            f"**Risk basis:** {decision_risk_column(context.hazards).replace('_', ' ').title()}"
+            f"**Risk basis:** {decision_risk_basis(context.hazards)}"
         )
     with evidence:
         render_section_header("Supporting Evidence", icon="✓")
-        risk_column = decision_risk_column(context.hazards)
+        decision_risks = decision_risk_values(context.hazards)
         render_metric_grid(
             [
                 (
@@ -2038,14 +2042,7 @@ def render_deployment_decision(context: AssessmentContext) -> None:
                 ),
                 (
                     "Extreme Risks",
-                    int(
-                    context.hazards.get(
-                        risk_column,
-                        pd.Series(dtype="string"),
-                    )
-                    .eq("Extreme")
-                    .sum()
-                ),
+                    int(decision_risks.eq("Extreme").sum()),
                     "Decision risk basis",
                 ),
                 (

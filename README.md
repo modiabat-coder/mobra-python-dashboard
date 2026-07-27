@@ -22,7 +22,7 @@ advanced functions is documented in
 On Windows PowerShell:
 
 ```powershell
-py -3.11 -m venv .venv
+py -3.12 -m venv .venv
 Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
 .venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
@@ -31,6 +31,9 @@ streamlit run app.py
 ```
 
 If `py` is unavailable, use `python -m venv .venv`. The application normally opens at `http://localhost:8501`.
+
+For development and testing, install `requirements-dev.txt` instead; it includes
+the runtime dependencies plus the test runner.
 
 ## Application workflow
 
@@ -110,6 +113,9 @@ Use the sidebar **Log out** control to end the authenticated session. Never
 commit the real `secrets.toml` file.
 
 ## Supported input formats
+
+Every uploaded CSV, XLSX, XLS, or JSON file is limited to 50 MB in both the
+Streamlit upload control and the application parser.
 
 ### CSV
 
@@ -192,7 +198,7 @@ The application excludes invalid score rows, handles a zero denominator as `N/A`
 
 **CONDITIONAL DEPLOYMENT** requires satisfied Critical Controls, no Extreme residual risk, and defined corrective actions for manageable High risks or remaining readiness improvements.
 
-**READY TO DEPLOY** requires satisfied Critical Controls, no Extreme residual risk, acceptable residual risks, complete data, required evidence, and satisfied core readiness requirements.
+**READY / DEPLOY** requires satisfied Critical Controls, no Extreme residual risk, acceptable residual risks, complete data, required evidence, and satisfied core readiness requirements.
 
 A high BRI never overrides a Critical Control or Extreme-risk blocker. In the included demonstration dataset, Overall BRI is 86.7% but 11 Critical Controls fail, so the required result is **DO NOT DEPLOY**.
 
@@ -269,6 +275,7 @@ The HTML report includes the MOBRA identity, generation metadata, source status,
 Run:
 
 ```powershell
+python -m pip install -r requirements-dev.txt
 python -m pytest -q -p no:cacheprovider
 python generate_demo_report.py
 ```
@@ -281,18 +288,22 @@ The suite covers:
 - Domain readiness.
 - Heatmap axes, counts, tooltips, names, and total validation.
 - Critical Control and Extreme residual-risk overrides.
-- DO NOT DEPLOY, CONDITIONAL DEPLOYMENT, and READY TO DEPLOY.
+- DO NOT DEPLOY, CONDITIONAL DEPLOYMENT, and READY / DEPLOY.
 - CSV, XLSX, XLS engine selection, and JSON.
 - Column Mapping and required fields.
 - Branded HTML and multi-worksheet Excel exports.
+- Formula-injection protection for user-controlled spreadsheet text.
+- Per-record residual-risk fallback and invalid Critical Control thresholds.
+- Uniform upload-size enforcement and archive path confinement.
 - Exact decision vocabulary and real singular/plural grammar.
 - Responsive KPI-grid and report-structure contracts.
 - Demonstration invariants: 24 hazards, 86.7% BRI, 11 failed Critical Controls, and DO NOT DEPLOY.
 - Default and every-page Streamlit smoke tests.
 
-Current verification result: **62 tests passed**. Live browser checks cover all fourteen
-pages plus 1440×900, 1280×720, 1024×768, 820 px, and 768 px application
-viewports. The standalone report is also checked at desktop, 820 px, and 560 px.
+Current verification result: **71 tests passed**. Live browser checks cover all
+fourteen pages plus 1440×900, 1280×720, 820×900, 768×900, and 390×844
+application viewports. The standalone report also has responsive structure
+contracts for desktop, tablet, and narrow layouts.
 
 ## Visual identity
 
@@ -313,7 +324,8 @@ The assets include transparent light- and dark-background wordmarks, vector and 
 ## Limitations
 
 - Legacy XLS reading depends on `xlrd`; workbook creation exports XLSX.
-- Very large JSON files should be split before import; the application rejects JSON over 50 MB.
+- Files larger than 50 MB must be split before import.
 - Arbitrary external schemas may require manual Column Mapping.
-- When residual-risk fields are absent, the current calculated risk is used as the decision risk and is clearly identified as such.
+- Decision risk is selected per record: valid residual risk is preferred, while
+  initial calculated risk is used where residual values are unavailable.
 - A Critical Control without an explicit `critical_threshold` uses its maximum score as the accepted threshold, preserving existing project behavior.

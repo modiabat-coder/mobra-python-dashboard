@@ -25,6 +25,10 @@ from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 
 from .config import APP_TITLE, APP_VERSION, FULL_DISCLAIMER
+from .security import (
+    safe_archive_name,
+    spreadsheet_safe_frame,
+)
 
 EMAIL_PATTERN = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
 MAX_EMAIL_ATTACHMENT_BYTES = 20 * 1024 * 1024
@@ -121,6 +125,7 @@ def _sample_hazards() -> pd.DataFrame:
 
 
 def _sheet_from_frame(workbook: Workbook, name: str, frame: pd.DataFrame, *, freeze: str = "A2") -> None:
+    frame = spreadsheet_safe_frame(frame)
     sheet = workbook.create_sheet(name)
     for column_index, column in enumerate(frame.columns, start=1):
         cell = sheet.cell(row=1, column=column_index, value=str(column))
@@ -537,9 +542,21 @@ def build_backup_zip(files: Mapping[str, bytes]) -> bytes:
     """Package only selected derived outputs; uploaded source files are never added implicitly."""
     buffer = io.BytesIO()
     timestamp = datetime.now(UTC).replace(microsecond=0).isoformat()
-    checksums = {filename: hashlib.sha256(content).hexdigest() for filename, content in files.items()}
+    normalized_files: dict[str, bytes] = {}
+    for filename, content in files.items():
+        safe_name = safe_archive_name(filename)
+        if safe_name in {"README.txt", "DISCLAIMER.txt"}:
+            raise ValueError(f"Reserved backup filename: {safe_name}.")
+        if safe_name in normalized_files:
+            raise ValueError(f"Duplicate backup filename: {safe_name}.")
+        normalized_files[safe_name] = content
+    checksums = {
+        filename: hashlib.sha256(content).hexdigest()
+        for filename, content in normalized_files.items()
+    }
     listing = "\n".join(
-        f"- {filename} ({len(files[filename]):,} bytes, SHA-256 {checksums[filename]})" for filename in files
+        f"- {filename} ({len(normalized_files[filename]):,} bytes, SHA-256 {checksums[filename]})"
+        for filename in normalized_files
     )
     with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as archive:
         archive.writestr(
@@ -553,14 +570,18 @@ def build_backup_zip(files: Mapping[str, bytes]) -> bytes:
             "This package contains derived outputs selected by the user; it is not an authorization to deploy.\n",
         )
         archive.writestr("DISCLAIMER.txt", FULL_DISCLAIMER)
-        for filename, content in files.items():
+        for filename, content in normalized_files.items():
             archive.writestr(filename, content)
     return buffer.getvalue()
 
 
 def template_catalogue_csv() -> bytes:
     """Return a stable manifest for printable and digital templates."""
-    return pd.DataFrame(TEMPLATE_CATALOGUE).to_csv(index=False).encode("utf-8-sig")
+    return (
+        spreadsheet_safe_frame(pd.DataFrame(TEMPLATE_CATALOGUE))
+        .to_csv(index=False)
+        .encode("utf-8-sig")
+    )
 
 
 def reset_assessment_state(session_state: Mapping[str, object]) -> None:

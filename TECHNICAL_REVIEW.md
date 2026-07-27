@@ -74,7 +74,7 @@ deployment-decision modules.
 - Added matrix tooltips with scores, category, count, and assigned hazard identifiers/names.
 - Verified matrix cell totals before rendering.
 - Preserved the weighted BRI formula and safe zero-denominator behavior.
-- Standardized final labels to DO NOT DEPLOY, CONDITIONAL DEPLOYMENT, and READY TO DEPLOY.
+- Standardized final labels to DO NOT DEPLOY, CONDITIONAL DEPLOYMENT, and READY / DEPLOY.
 - Kept Critical Controls, Extreme residual risk, material validation errors, critical missing evidence, and core-readiness failures non-bypassable.
 
 ### Reporting and exports

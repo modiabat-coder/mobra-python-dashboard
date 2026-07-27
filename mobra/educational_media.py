@@ -10,6 +10,8 @@ from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
+from .security import resolve_within, safe_archive_name
+
 ROOT = Path(__file__).resolve().parent.parent
 MEDIA_MANIFEST = ROOT / "config" / "educational_media.json"
 
@@ -53,7 +55,14 @@ def validate_educational_media(records: Iterable[dict[str, Any]]) -> list[str]:
             errors.append(f"Duplicate media_id: {media_id}")
         seen.add(media_id)
         for field in ("svg_path", "png_path", "pdf_path"):
-            path = ROOT / str(record[field])
+            try:
+                path = resolve_within(ROOT, str(record[field]))
+            except ValueError:
+                errors.append(
+                    f"{media_id} asset path must remain inside the MOBRA project: "
+                    f"{record[field]}"
+                )
+                continue
             if not path.is_file() or path.stat().st_size == 0:
                 errors.append(f"{media_id} asset is missing or empty: {record[field]}")
         if not record["source_resource_ids"]:
@@ -67,6 +76,9 @@ def validate_educational_media(records: Iterable[dict[str, Any]]) -> list[str]:
 def educational_media_package(records: Iterable[dict[str, Any]] | None = None) -> bytes:
     """Package only MOBRA-created SVG/PNG/PDF files, never third-party PDFs."""
     media = list(records or load_educational_media())
+    errors = validate_educational_media(media)
+    if errors:
+        raise ValueError("; ".join(errors))
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as archive:
         archive.writestr(
@@ -85,10 +97,12 @@ def educational_media_package(records: Iterable[dict[str, Any]] | None = None) -
                 archive.write(path, arcname=f"assets/posters/{filename}")
         for record in media:
             for field in ("svg_path", "png_path", "pdf_path"):
-                path = ROOT / str(record[field])
+                path = resolve_within(ROOT, str(record[field]))
                 archive.write(
                     path,
-                    arcname=path.relative_to(ROOT).as_posix(),
+                    arcname=safe_archive_name(
+                        path.relative_to(ROOT).as_posix()
+                    ),
                 )
     return buffer.getvalue()
 

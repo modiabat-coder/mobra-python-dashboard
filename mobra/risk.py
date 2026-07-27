@@ -5,15 +5,11 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from .config import RISK_COLORS, RISK_LEVELS
+from .config import RISK_COLORS, RISK_LEVELS, RISK_THRESHOLDS
 
 
-RISK_CATEGORIES = {
-    "Low": (1, 4),
-    "Moderate": (5, 9),
-    "High": (10, 16),
-    "Extreme": (17, 25),
-}
+# Backward-compatible public name; numeric thresholds are defined once in config.
+RISK_CATEGORIES = RISK_THRESHOLDS
 
 
 def classify_risk(score: float | int | None) -> str:
@@ -26,15 +22,10 @@ def classify_risk(score: float | int | None) -> str:
         return "Invalid"
     if not np.isfinite(score):
         return "Unknown"
-    if score < 1 or score > 25:
-        return "Invalid"
-    if score <= 4:
-        return "Low"
-    if score <= 9:
-        return "Moderate"
-    if score <= 16:
-        return "High"
-    return "Extreme"
+    for category, (minimum, maximum) in RISK_THRESHOLDS.items():
+        if minimum <= score <= maximum:
+            return category
+    return "Invalid"
 
 
 def valid_scale(value: object) -> bool:

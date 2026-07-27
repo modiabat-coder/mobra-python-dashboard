@@ -33,17 +33,19 @@ from .config import (
     PRIMARY_COLOR,
     PRIMARY_DARK,
     RISK_COLORS,
+    RISK_TEXT_COLORS,
     SECONDARY_COLOR,
     SYNTHETIC_DATA_LABEL,
 )
-from .decisions import decision_risk_column
+from .decisions import decision_risk_basis, decision_risk_values
 from .readiness import data_quality_summary, domain_readiness, failed_critical_controls
 from .risk import heatmap_counts, heatmap_total
+from .security import spreadsheet_safe_frame
 
 
 def csv_bytes(frame: pd.DataFrame) -> bytes:
     """Serialize a table as UTF-8 with BOM for reliable Windows Excel display."""
-    return frame.to_csv(index=False).encode("utf-8-sig")
+    return spreadsheet_safe_frame(frame).to_csv(index=False).encode("utf-8-sig")
 
 
 def summary_payload(
@@ -59,12 +61,8 @@ def summary_payload(
     validation_messages: list[str] | None = None,
 ) -> dict[str, Any]:
     """Build a portable executive-summary dictionary."""
-    risk_column = decision_risk_column(hazards)
-    risk_counts = (
-        hazards.get(risk_column, pd.Series(dtype="string"))
-        .value_counts()
-        .to_dict()
-    )
+    risk_values = decision_risk_values(hazards)
+    risk_counts = risk_values.value_counts().to_dict()
     return {
         "system": APP_NAME,
         "full_name": APP_FULL_NAME,
@@ -77,7 +75,7 @@ def summary_payload(
         "decision_reasons": reasons,
         "hazard_count": len(hazards),
         "requirement_count": len(requirements),
-        "risk_basis": risk_column,
+        "risk_basis": decision_risk_basis(hazards),
         "risk_counts": risk_counts,
         "heatmap_cell_total": heatmap_total(hazards),
         "failed_critical_controls": len(failed_critical_controls(requirements)),
@@ -153,22 +151,42 @@ def make_excel_workbook(
     )
     buffer = io.BytesIO()
     with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
-        executive.to_excel(writer, sheet_name="Executive Summary", index=False)
-        domain_readiness(requirements).to_excel(
+        spreadsheet_safe_frame(executive).to_excel(
+            writer,
+            sheet_name="Executive Summary",
+            index=False,
+        )
+        spreadsheet_safe_frame(domain_readiness(requirements)).to_excel(
             writer,
             sheet_name="Domain Summary",
             index=False,
         )
-        requirements.to_excel(writer, sheet_name="Requirements", index=False)
-        hazards.to_excel(writer, sheet_name="Hazard Register", index=False)
+        spreadsheet_safe_frame(requirements).to_excel(
+            writer,
+            sheet_name="Requirements",
+            index=False,
+        )
+        spreadsheet_safe_frame(hazards).to_excel(
+            writer,
+            sheet_name="Hazard Register",
+            index=False,
+        )
         matrix.to_excel(writer, sheet_name="Risk Matrix")
-        failed_critical_controls(requirements).to_excel(
+        spreadsheet_safe_frame(failed_critical_controls(requirements)).to_excel(
             writer,
             sheet_name="Critical Controls",
             index=False,
         )
-        actions.to_excel(writer, sheet_name="Corrective Actions", index=False)
-        issues.to_excel(writer, sheet_name="Validation Issues", index=False)
+        spreadsheet_safe_frame(actions).to_excel(
+            writer,
+            sheet_name="Corrective Actions",
+            index=False,
+        )
+        spreadsheet_safe_frame(issues).to_excel(
+            writer,
+            sheet_name="Validation Issues",
+            index=False,
+        )
         workbook = writer.book
         for sheet in workbook.worksheets:
             sheet.freeze_panes = "A2"
@@ -238,10 +256,7 @@ def make_html_report(
     failed = failed_critical_controls(requirements)
     quality = data_quality_summary(hazards, requirements)
     actions = build_corrective_actions(hazards, requirements)
-    risk_column = decision_risk_column(hazards)
-    extreme_count = int(
-        hazards.get(risk_column, pd.Series(dtype=str)).eq("Extreme").sum()
-    )
+    extreme_count = int(decision_risk_values(hazards).eq("Extreme").sum())
     top_hazards = hazards.sort_values("risk_score", ascending=False).head(10)
     bri_display = "N/A" if pd.isna(bri) else f"{bri:.1f}%"
     failed_count = len(failed)
@@ -335,7 +350,7 @@ h1,h2,h3{color:var(--primary);margin-top:0}h2{font-size:20px;border-bottom:1px s
 <section class="section"><h2>Executive Summary</h2><p>MOBRA assessed {{ requirement_count }} operational requirements and {{ hazard_count }} hazards. The Overall BRI is {{ bri_display }}. The deployment decision remains governed by Critical Controls, residual risk, critical data completeness, and required evidence; BRI alone does not authorize deployment.</p><p><strong>Data source:</strong> {{ data_source }}<br><strong>Hazard file:</strong> {{ hazard_filename }}<br><strong>Requirements file:</strong> {{ requirements_filename }}</p></section>
 <div class="two"><section class="section plot">{{ gauge_html }}</section><section class="section plot">{{ risk_html }}</section></div>
 <section class="section plot"><h2>Domain Readiness</h2>{{ domain_html }}</section>
-<section class="section page-break plot"><h2>Risk Heatmap</h2>{{ heatmap_html }}<div class="risk-legend"><span style="background:{{ low }};color:white">Green = Low (1–4)</span><span style="background:{{ moderate }};color:#3d3100">Yellow = Moderate (5–9)</span><span style="background:{{ high }};color:white">Orange = High (10–16)</span><span style="background:{{ extreme }};color:white">Red = Extreme (17–25)</span></div><p class="note">Cell color represents the MOBRA risk category based on Likelihood × Consequence. The number inside each cell represents the count of hazards assigned to that combination. Verified total: {{ heatmap_total }} valid hazards.</p></section>
+<section class="section page-break plot"><h2>Risk Heatmap</h2>{{ heatmap_html }}<div class="risk-legend"><span style="background:{{ low }};color:white">Green = Low (1–4)</span><span style="background:{{ moderate }};color:#3d3100">Yellow = Moderate (5–9)</span><span style="background:{{ high }};color:{{ high_text }}">Orange = High (10–16)</span><span style="background:{{ extreme }};color:white">Red = Extreme (17–25)</span></div><p class="note">Cell color represents the MOBRA risk category based on Likelihood × Consequence. The number inside each cell represents the count of hazards assigned to that combination. Verified total: {{ heatmap_total }} valid hazards.</p></section>
 <section class="section"><h2>Critical-control Findings</h2>{{ critical_table }}</section>
 <section class="section"><h2>Top Hazards</h2>{{ top_hazards_table }}</section>
 <section class="section"><h2>Corrective Actions</h2>{{ actions_table }}</section>
@@ -372,6 +387,7 @@ h1,h2,h3{color:var(--primary);margin-top:0}h2{font-size:20px;border-bottom:1px s
         low=RISK_COLORS["Low"],
         moderate=RISK_COLORS["Moderate"],
         high=RISK_COLORS["High"],
+        high_text=RISK_TEXT_COLORS["High"],
         extreme=RISK_COLORS["Extreme"],
         heatmap_total=heatmap_total(filtered),
         critical_table=_table(

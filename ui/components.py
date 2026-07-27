@@ -11,6 +11,7 @@ from typing import Iterable, Mapping, Sequence
 import streamlit as st
 
 from mobra.config import (
+    APP_FULL_NAME,
     DECISION_COLORS,
     DECISION_ICONS,
     ICON_PATH,
@@ -47,10 +48,17 @@ def logo_data_uri(*, dark_background: bool = False) -> str:
 
 
 def render_logo(*, dark_background: bool = False, width: int = 300) -> None:
-    """Render the appropriate transparent MOBRA wordmark."""
-    path = LOGO_DARK_PATH if dark_background else LOGO_PATH
-    if Path(path).exists():
-        st.image(str(path), width=width)
+    """Render the appropriate transparent MOBRA wordmark with useful alt text."""
+    uri = logo_data_uri(dark_background=dark_background)
+    if uri:
+        st.markdown(
+            (
+                f'<img src="{uri}" '
+                f'alt="MOBRA — {escape(APP_FULL_NAME)} wordmark" '
+                f'style="display:block;width:min(100%,{int(width)}px);height:auto">'
+            ),
+            unsafe_allow_html=True,
+        )
     else:
         st.markdown("## MOBRA")
 

@@ -10,10 +10,10 @@ import streamlit as st
 
 from mobra.config import (
     APP_NAME,
-    LOGO_DARK_PATH,
     count_phrase,
 )
 from mobra.validation import ValidationResult
+from ui.components import render_logo
 
 
 PAGE_GROUPS = {
@@ -71,7 +71,7 @@ def render_sidebar(
     if current not in PAGE_ORDER:
         current = "Home"
     with st.sidebar:
-        st.image(str(LOGO_DARK_PATH), width="stretch")
+        render_logo(dark_background=True, width=280)
         st.markdown('<div class="mobra-sidebar-rule"></div>', unsafe_allow_html=True)
         selected = st.radio(
             "Navigation",

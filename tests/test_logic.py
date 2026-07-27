@@ -8,7 +8,9 @@ from zipfile import ZipFile
 
 import pandas as pd
 import pytest
+from openpyxl import load_workbook
 
+import mobra.io as io_module
 from mobra.acceptance import RiskAcceptancePolicy, apply_risk_acceptance
 from mobra.auth import hash_password, load_auth_config, verify_password
 from mobra.config import (
@@ -16,13 +18,19 @@ from mobra.config import (
     DECISION_DO_NOT_DEPLOY,
     DECISION_LABELS,
     DECISION_READY,
+    RISK_COLORS,
+    RISK_TEXT_COLORS,
     count_phrase,
 )
 from mobra.critical_controls import (
     assess_critical_controls,
     validate_critical_control_profile,
 )
-from mobra.decisions import deployment_decision
+from mobra.decisions import (
+    decision_risk_basis,
+    decision_risk_values,
+    deployment_decision,
+)
 from mobra.educational_media import (
     educational_media_package,
     load_educational_media,
@@ -37,18 +45,21 @@ from mobra.mapping import mapping_coverage_summary, validate_mapping
 from mobra.manuscript import manuscript_is_current, manuscript_metadata
 from mobra.mission_map import mission_map_deck, synthetic_mission_stages
 from mobra.operational_tools import (
+    build_backup_zip,
     build_field_assessment_package,
     build_hazard_pdf,
     build_orl_pdf,
 )
 from mobra.readiness import calculate_bri, domain_readiness, failed_critical_controls
-from mobra.reporting import make_excel_workbook, make_html_report
+from mobra.reporting import csv_bytes, make_excel_workbook, make_html_report
 from mobra.resources import (
+    build_open_access_reference_package,
     load_normative_resources,
     load_supporting_literature,
     validate_resource_manifest,
 )
 from mobra.risk import assert_heatmap_total, classify_risk, heatmap_counts, heatmap_total
+from mobra.security import spreadsheet_safe_frame
 from mobra.validation import (
     suggest_column_mapping,
     validate_hazards,
@@ -163,6 +174,105 @@ def test_extreme_residual_risk_override() -> None:
     assert decision == "DO NOT DEPLOY"
 
 
+def test_partial_residual_data_uses_per_record_initial_risk_fallback() -> None:
+    hazard_result = validate_hazards(
+        pd.DataFrame(
+            {
+                "hazard": ["residual available", "residual missing"],
+                "likelihood": [1, 5],
+                "consequence": [1, 5],
+                "residual_likelihood": [1, pd.NA],
+                "residual_consequence": [1, pd.NA],
+            }
+        )
+    )
+    requirements = validate_requirements(
+        pd.DataFrame(
+            {
+                "requirement": ["ready"],
+                "observed_score": [5],
+                "maximum_score": [5],
+            }
+        )
+    ).data
+    values = decision_risk_values(hazard_result.data)
+    decision, reasons = deployment_decision(
+        hazard_result.data,
+        requirements,
+        100.0,
+    )
+    assert values.tolist() == ["Low", "Extreme"]
+    assert decision_risk_basis(hazard_result.data) == (
+        "Residual risk with initial-risk fallback"
+    )
+    assert decision == DECISION_DO_NOT_DEPLOY
+    assert any("Extreme decision-basis risk" in reason for reason in reasons)
+
+
+def test_incomplete_residual_pair_is_reported_with_safe_fallback() -> None:
+    result = validate_hazards(
+        pd.DataFrame(
+            {
+                "hazard": ["partial"],
+                "likelihood": [4],
+                "consequence": [5],
+                "residual_likelihood": [2],
+                "residual_consequence": [pd.NA],
+            }
+        )
+    )
+    assert any("residual-risk pair" in warning for warning in result.warnings)
+    assert decision_risk_values(result.data).tolist() == ["Extreme"]
+
+
+def test_invalid_critical_threshold_and_unknown_flag_fail_closed() -> None:
+    invalid_threshold = validate_requirements(
+        pd.DataFrame(
+            {
+                "requirement": ["critical"],
+                "observed_score": [5],
+                "maximum_score": [5],
+                "critical_control": [True],
+                "critical_threshold": [-1],
+                "objective_evidence": ["Verified"],
+            }
+        )
+    )
+    assert any("invalid critical threshold" in error for error in invalid_threshold.errors)
+    assert len(failed_critical_controls(invalid_threshold.data)) == 1
+
+    unknown_flag = validate_requirements(
+        pd.DataFrame(
+            {
+                "requirement": ["ambiguous"],
+                "observed_score": [5],
+                "maximum_score": [5],
+                "critical_control": ["perhaps"],
+                "objective_evidence": ["Verified"],
+            }
+        )
+    )
+    assert any("critical-control flag" in error for error in unknown_flag.errors)
+    assert unknown_flag.invalid_rows == [0]
+
+
+def test_reported_compliance_status_cannot_override_validated_status() -> None:
+    result = validate_requirements(
+        pd.DataFrame(
+            {
+                "requirement": ["gap"],
+                "observed_score": [1],
+                "maximum_score": [5],
+                "objective_evidence": ["Verified"],
+                "compliance_status": ["Compliant"],
+            }
+        )
+    )
+    assert result.data.loc[0, "reported_compliance_status"] == "Compliant"
+    assert result.data.loc[0, "compliance_status"] == "Below threshold"
+    assert any("reported compliance status" in warning for warning in result.warnings)
+
+
 def test_decision_thresholds_without_overrides() -> None:
     hazards = validate_hazards(pd.DataFrame({"hazard": ["x"], "likelihood": [1], "consequence": [1]})).data
     req = validate_requirements(pd.DataFrame({"requirement": ["ok"], "observed_score": [5], "maximum_score": [5]})).data
@@ -175,7 +285,7 @@ def test_decision_labels_are_exact_and_centralized() -> None:
     assert DECISION_LABELS == (
         "DO NOT DEPLOY",
         "CONDITIONAL DEPLOYMENT",
-        "READY TO DEPLOY",
+        "READY / DEPLOY",
     )
 
 
@@ -264,6 +374,20 @@ def test_empty_and_duplicate_header_files_are_rejected() -> None:
             b"hazard,likelihood,Likelihood,consequence\nx,1,1,2\n",
             name="duplicate.csv",
         )
+
+
+def test_every_upload_format_uses_the_same_size_limit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(io_module, "MAX_UPLOAD_BYTES", 10)
+    for filename in (
+        "oversized.csv",
+        "oversized.xlsx",
+        "oversized.xls",
+        "oversized.json",
+    ):
+        with pytest.raises(ValueError, match="exceeds"):
+            read_data_file(b"x" * 11, name=filename)
 
 
 @pytest.mark.parametrize(
@@ -582,6 +706,96 @@ def test_preserved_media_and_manuscript_assets_are_complete_and_relative() -> No
     assert manuscript_is_current()
 
 
+def test_export_text_is_formula_safe_without_changing_negative_numbers() -> None:
+    source = pd.DataFrame(
+        {
+            "text": ["=1+1", " +SUM(A1:A2)", "-command", "@reference", "safe"],
+            "number": [-5, -4, -3, -2, -1],
+        }
+    )
+    safe = spreadsheet_safe_frame(source)
+    assert safe["text"].tolist() == [
+        "'=1+1",
+        "' +SUM(A1:A2)",
+        "'-command",
+        "'@reference",
+        "safe",
+    ]
+    assert safe["number"].tolist() == [-5, -4, -3, -2, -1]
+    assert b"'=1+1" in csv_bytes(source)
+
+    hazards = validate_hazards(
+        pd.DataFrame(
+            {
+                "hazard": ["=malicious()"],
+                "likelihood": [1],
+                "consequence": [1],
+            }
+        )
+    ).data
+    requirements = validate_requirements(
+        pd.DataFrame(
+            {
+                "requirement": ["+external()"],
+                "observed_score": [5],
+                "maximum_score": [5],
+            }
+        )
+    ).data
+    bri = calculate_bri(requirements)
+    decision, reasons = deployment_decision(hazards, requirements, bri)
+    workbook = load_workbook(
+        BytesIO(make_excel_workbook(hazards, requirements, bri, decision, reasons)),
+        data_only=False,
+    )
+    hazard_sheet = workbook["Hazard Register"]
+    headers = [cell.value for cell in hazard_sheet[1]]
+    hazard_cell = hazard_sheet.cell(
+        row=2,
+        column=headers.index("hazard") + 1,
+    )
+    assert hazard_cell.value == "'=malicious()"
+    assert hazard_cell.data_type != "f"
+
+
+def test_archives_and_resource_packages_reject_unsafe_paths() -> None:
+    with pytest.raises(ValueError, match="Unsafe archive member"):
+        build_backup_zip({"../assessment.json": b"{}"})
+    with pytest.raises(ValueError, match="inside"):
+        build_open_access_reference_package(
+            [
+                {
+                    "local_file": "../outside.pdf",
+                    "redistribution_status": "Redistribution permitted with attribution",
+                    "issuing_organization": "Example organization",
+                }
+            ]
+        )
+
+
+def test_risk_label_text_contrast_meets_wcag_aa() -> None:
+    def luminance(value: str) -> float:
+        channels = [
+            int(value[index : index + 2], 16) / 255
+            for index in (1, 3, 5)
+        ]
+        linear = [
+            channel / 12.92
+            if channel <= 0.04045
+            else ((channel + 0.055) / 1.055) ** 2.4
+            for channel in channels
+        ]
+        return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2]
+
+    for category in ("Low", "Moderate", "High", "Extreme"):
+        foreground = luminance(RISK_TEXT_COLORS[category])
+        background = luminance(RISK_COLORS[category])
+        ratio = (max(foreground, background) + 0.05) / (
+            min(foreground, background) + 0.05
+        )
+        assert ratio >= 4.5
+
+
 def test_user_facing_sources_have_no_retired_labels_or_placeholder_grammar() -> None:
     paths = [
         *sorted((ROOT / "mobra").glob("*.py")),
@@ -590,7 +804,7 @@ def test_user_facing_sources_have_no_retired_labels_or_placeholder_grammar() -> 
         ROOT / "TECHNICAL_REVIEW.md",
     ]
     text = "\n".join(path.read_text(encoding="utf-8") for path in paths)
-    retired = "READY " + "/" + " DEPLOY"
+    retired = "READY TO " + "DEPLOY"
     placeholder = "Control" + "(s)"
     assert retired not in text
     assert placeholder not in text
