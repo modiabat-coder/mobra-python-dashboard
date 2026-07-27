@@ -8,8 +8,9 @@ MOBRA supports technical verification, prototype testing, and external-data comp
 
 The current interface also provides optional secrets-backed sign-in, contextual
 executive gauges, a clearly synthetic interactive mission workflow, and a
-dedicated Research and References view. These additions do not change any
-scientific formula, threshold, or deployment rule.
+dedicated Research and References view. The Equations & Practical Calculations
+page adds manuscript-traceable formulas, worked examples, and validated
+interactive calculators without duplicating the central decision rules.
 
 ![MOBRA executive dashboard](assets/screenshots/home_dashboard.png)
 
@@ -49,7 +50,9 @@ the runtime dependencies plus the test runner.
    governance profile under **Advanced supporting data**.
 10. Review Requirements, Hazards, Risk Matrix & Heatmap, Readiness,
     Deployment Decision, and Corrective Actions.
-11. Generate branded CSV, XLSX, JSON, HTML, mapping, governance, acceptance,
+11. Open **Equations & Calculations** to inspect source-traceable equations,
+    test calculator inputs, and review the Critical-Control override.
+12. Generate branded CSV, XLSX, JSON, HTML, mapping, governance, acceptance,
     field-workbook, printable-PDF, and resource-catalogue outputs.
 
 The original source file is never overwritten.
@@ -69,7 +72,7 @@ The original source file is never overwritten.
 - **Risk Matrix & Heatmap** — category distribution, initial/residual
   comparison, domain concentration, top hazards, verified 5 × 5 matrix, and
   supplementary risk-acceptance review.
-- **Readiness Dashboard** — compact Overall BRI, weighted domain readiness, and least-ready-domain priorities.
+- **Readiness Dashboard** — compact Overall BRI, score-ratio domain readiness, and least-ready-domain priorities.
 - **Mission Map** — synthetic, interactive deployment-gate workflow with
   tooltips, progress, and status legend; no real operational coordinates are
   represented.
@@ -78,11 +81,31 @@ The original source file is never overwritten.
 - **Reports and Export** — branded HTML report, structured Excel workbook,
   JSON/CSV outputs, advanced analysis exports, field workbooks, printable PDFs,
   import templates, and normative resource catalogues.
+- **Equations & Calculations** — manuscript-traceable LaTeX equations, source
+  pages, worked examples, variable glossary, BRI/domain/risk/residual-risk
+  calculators, and a deployment simulator that reuses the central decision
+  function.
 - **Methodology** — fixed formulas, thresholds, terms, and decision rules.
 - **Research & Manuscript** — the approved manuscript download, priority WHO,
   BMBL, ISO 35001, and ISO 31000 references, and supporting scientific
   literature.
 - **About MOBRA** — identity, validation boundary, scope, and future-data compatibility.
+
+## Equation source and calculator scope
+
+The equation page was audited against the 27-page author-supplied revision of
+`MOBRA_Manuscript.pdf` dated 27 July 2026. Original manuscript equations,
+proposed future-development metrics, current software-policy thresholds, and
+derived calculations are labelled separately. Detailed equation-to-code
+traceability, page references, assumptions, and formulas that were not supplied
+by the manuscript are recorded in
+[`docs/EQUATION_AUDIT.md`](docs/EQUATION_AUDIT.md).
+
+Calculator inputs are validated before calculation. Explicitly not-applicable
+requirements can be identified through an optional `applicable` column (accepted
+aliases include `is_applicable`, `requirement_applicable`, and
+`included_in_assessment`); they are excluded from both readiness numerators and
+denominators.
 
 ## Optional secure access
 
@@ -182,7 +205,7 @@ BRI (%) = Sum of Observed Requirement Scores
           × 100
 ```
 
-The application excludes invalid score rows, handles a zero denominator as `N/A`, and uses the same weighted formula for domain readiness.
+The application excludes invalid or explicitly not-applicable score rows, handles a zero denominator as `N/A`, and uses the same observed-to-maximum formula for domain readiness.
 
 ![MOBRA readiness dashboard](assets/screenshots/readiness_dashboard.png)
 
@@ -250,6 +273,7 @@ The HTML report includes the MOBRA identity, generation metadata, source status,
 ├── mobra/
 │   ├── actions.py            # Unified corrective-action register
 │   ├── auth.py               # Optional secrets-backed login and logout
+│   ├── calculations.py       # Manuscript equations and calculator validation
 │   ├── charts.py             # Shared Plotly theme and figures
 │   ├── config.py             # Names, paths, palette, risk/decision constants
 │   ├── decisions.py          # Deployment rules and overrides
@@ -261,6 +285,7 @@ The HTML report includes the MOBRA identity, generation metadata, source status,
 │   └── validation.py         # Aliases, mapping, validation, issue register
 ├── ui/
 │   ├── components.py         # Headers, cards, badges, decisions, empty states
+│   ├── equations.py          # Equation page and interactive calculators
 │   ├── layout.py             # Sidebar and grouped navigation
 │   ├── pages.py              # Page renderers and shared assessment context
 │   ├── state.py              # Active dataset and navigation session state
@@ -285,9 +310,13 @@ The suite covers:
 - Risk Score and all category boundaries.
 - Invalid Likelihood and Consequence values.
 - Weighted BRI and zero denominator.
+- Explicit not-applicable exclusion and calculator input validation.
 - Domain readiness.
+- Evidence completeness, weighted-future BRI, BRI change, CAPA closure, and
+  appendix accuracy calculations.
 - Heatmap axes, counts, tooltips, names, and total validation.
 - Critical Control and Extreme residual-risk overrides.
+- Deployment-simulator reuse of the central decision function.
 - DO NOT DEPLOY, CONDITIONAL DEPLOYMENT, and READY / DEPLOY.
 - CSV, XLSX, XLS engine selection, and JSON.
 - Column Mapping and required fields.
@@ -300,10 +329,10 @@ The suite covers:
 - Demonstration invariants: 24 hazards, 86.7% BRI, 11 failed Critical Controls, and DO NOT DEPLOY.
 - Default and every-page Streamlit smoke tests.
 
-Current verification result: **71 tests passed**. Live browser checks cover all
-fourteen pages plus 1440×900, 1280×720, 820×900, 768×900, and 390×844
-application viewports. The standalone report also has responsive structure
-contracts for desktop, tablet, and narrow layouts.
+Current verification result: **118 tests passed**. Browser checks cover all
+fifteen pages plus representative desktop, tablet, and mobile viewports.
+The standalone report also has responsive structure contracts for desktop,
+tablet, and narrow layouts.
 
 ## Visual identity
 

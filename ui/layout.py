@@ -24,7 +24,12 @@ PAGE_GROUPS = {
     "Analysis": ["Risk Analysis", "Readiness Dashboard", "Mission Map"],
     "Decision": ["Deployment Decision", "Corrective Actions"],
     "Reporting": ["Reports and Export"],
-    "System Information": ["Methodology", "Research and References", "About MOBRA"],
+    "System Information": [
+        "Equations & Calculations",
+        "Methodology",
+        "Research and References",
+        "About MOBRA",
+    ],
 }
 PAGE_ICONS = {
     "Home": "\u2302",
@@ -38,6 +43,7 @@ PAGE_ICONS = {
     "Deployment Decision": "\u25c6",
     "Corrective Actions": "\u21bb",
     "Reports and Export": "\u21e9",
+    "Equations & Calculations": "\u2211",
     "Methodology": "\u2211",
     "Research and References": "\u25a1",
     "About MOBRA": "\u24d8",
@@ -54,6 +60,7 @@ PAGE_LABELS = {
     "Deployment Decision": "Deployment Decision",
     "Corrective Actions": "Corrective Actions",
     "Reports and Export": "Reports and Export",
+    "Equations & Calculations": "Equations & Calculations",
     "Methodology": "Methodology",
     "Research and References": "Research & Manuscript",
     "About MOBRA": "About MOBRA",

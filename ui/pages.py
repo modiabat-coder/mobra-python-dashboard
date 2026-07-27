@@ -139,6 +139,7 @@ from ui.components import (
     render_step,
     render_validation_alert,
 )
+from ui.equations import render_equations_calculations
 from ui.state import (
     active_supporting_data,
     navigate_to,
@@ -670,7 +671,7 @@ def render_home(context: AssessmentContext) -> None:
             unsafe_allow_html=True,
         )
         st.caption(
-            "The gauge visualizes weighted readiness only. It cannot authorize "
+            "The gauge visualizes aggregate score-ratio readiness only. It cannot authorize "
             "deployment or bypass failed Critical Controls."
         )
     decision_risks = decision_risk_values(context.hazards)
@@ -718,7 +719,7 @@ def render_home(context: AssessmentContext) -> None:
             key="home_bri_radial",
         )
         st.caption(
-            "Weighted observed score ÷ maximum score. BRI alone never authorizes deployment."
+            "Observed score ÷ maximum score. BRI alone never authorizes deployment."
         )
     with gauge_columns[1]:
         st.plotly_chart(
@@ -772,7 +773,7 @@ def render_home(context: AssessmentContext) -> None:
         else 0
     )
     metric_values = [
-        ("Overall BRI", _format_bri(context.bri), "Weighted observed ÷ maximum score", PRIMARY_COLOR),
+        ("Overall BRI", _format_bri(context.bri), "Observed ÷ maximum score", PRIMARY_COLOR),
         ("Requirements Assessed", f"{assessed}/{len(context.requirements)}", "Operational readiness records", PRIMARY_COLOR),
         ("Total Hazards", len(context.hazards), "Structurally valid imported records", PRIMARY_COLOR),
         (
@@ -788,7 +789,7 @@ def render_home(context: AssessmentContext) -> None:
     ]
     render_metric_grid(metric_values)
 
-    render_section_header("Domain Readiness Overview", icon="◔", help_text="Weighted readiness by operational domain.")
+    render_section_header("Domain Readiness Overview", icon="◔", help_text="Score-ratio readiness by operational domain.")
     if context.domains.empty:
         render_empty_state("Domain readiness unavailable", "Validated domain scores are required.")
     else:
@@ -883,6 +884,7 @@ def render_home(context: AssessmentContext) -> None:
         ("Open Mission Map", "Mission Map"),
         ("Review Deployment Decision", "Deployment Decision"),
         ("Open Reports and Export", "Reports and Export"),
+        ("Open Equations & Calculations", "Equations & Calculations"),
         ("Open Research & References", "Research and References"),
     ]
     for index, (label, page) in enumerate(destinations):
@@ -1926,7 +1928,7 @@ def render_readiness_dashboard(context: AssessmentContext) -> None:
         key="readiness_domains",
     )
     st.caption(
-        "Domain values use the same weighted formula as Overall BRI and are sorted from least to most ready."
+        "Domain values use the same observed-to-maximum formula as Overall BRI and are sorted from least to most ready."
     )
 
     render_section_header("Least-Ready Domains and Recommended Focus", icon="↻")
@@ -2250,7 +2252,7 @@ def render_reports_export(context: AssessmentContext) -> None:
     report_metrics = [
         ("Data Status", context.meta.get("source_label", "—"), "Clearly labelled in every export"),
         ("Decision", context.decision, "Non-bypassable rule output"),
-        ("Overall BRI", _format_bri(context.bri), "Weighted readiness"),
+        ("Overall BRI", _format_bri(context.bri), "Aggregate readiness"),
         ("Generated", datetime.now().strftime("%Y-%m-%d %H:%M"), "Local system time"),
     ]
     render_metric_grid(report_metrics)
@@ -2523,7 +2525,7 @@ def render_mission_map(context: AssessmentContext) -> None:
     render_metric_grid(
         [
             ("Workflow Stages", len(stages), "Synthetic decision gates", PRIMARY_COLOR),
-            ("Overall BRI", _format_bri(context.bri), "Weighted readiness", PRIMARY_COLOR),
+            ("Overall BRI", _format_bri(context.bri), "Aggregate readiness", PRIMARY_COLOR),
             (
                 "Failed Critical Controls",
                 failed_count,
@@ -3053,6 +3055,7 @@ PAGE_RENDERERS = {
     "Deployment Decision": render_deployment_decision,
     "Corrective Actions": render_corrective_actions,
     "Reports and Export": render_reports_export,
+    "Equations & Calculations": render_equations_calculations,
     "Methodology": render_methodology,
     "Research and References": render_research_references,
     "About MOBRA": render_about,

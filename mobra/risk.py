@@ -37,9 +37,24 @@ def valid_scale(value: object) -> bool:
     return np.isfinite(number) and number.is_integer() and 1 <= number <= 5
 
 
-def calculate_risk_score(likelihood: pd.Series, consequence: pd.Series) -> pd.Series:
+def calculate_risk_score(
+    likelihood: pd.Series | float | int,
+    consequence: pd.Series | float | int,
+) -> pd.Series | float | int:
     """Calculate ``Likelihood × Consequence`` without coercing invalid data."""
     return likelihood * consequence
+
+
+def calculate_residual_risk(
+    residual_likelihood: float | int,
+    residual_consequence: float | int,
+) -> int:
+    """Calculate one validated residual-risk score on the MOBRA 1–5 scales."""
+    if not valid_scale(residual_likelihood) or not valid_scale(residual_consequence):
+        raise ValueError(
+            "Residual likelihood and consequence must be integers from 1 to 5."
+        )
+    return int(calculate_risk_score(residual_likelihood, residual_consequence))
 
 
 def heatmap_counts(hazards: pd.DataFrame) -> pd.DataFrame:
