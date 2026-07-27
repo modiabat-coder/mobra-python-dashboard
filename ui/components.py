@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Iterable, Mapping, Sequence
 
 import streamlit as st
+import streamlit.components.v1 as components
 
 from mobra.config import (
     APP_FULL_NAME,
@@ -25,6 +26,43 @@ from mobra.config import (
 
 
 MetricSpec = Mapping[str, str | int | float | None] | Sequence[str | int | float | None]
+
+
+def scroll_to_top_html() -> str:
+    """Return the isolated component script used after page navigation."""
+    return """
+    <script>
+    (() => {
+      const scrollToTop = () => {
+        const parentWindow = window.parent;
+        const parentDocument = window.parent.document;
+        if (parentWindow.location.hash) {
+          parentWindow.history.replaceState(
+            null,
+            "",
+            `${parentWindow.location.pathname}${parentWindow.location.search}`
+          );
+        }
+        const main = parentDocument.querySelector('[data-testid="stMain"]');
+        const target = main || parentDocument.scrollingElement;
+        if (target && typeof target.scrollTo === "function") {
+          target.scrollTo({ top: 0, left: 0, behavior: "auto" });
+        } else {
+          parentWindow.scrollTo(0, 0);
+        }
+      };
+      window.parent.requestAnimationFrame(() => scrollToTop());
+      [100, 300, 750, 1500].forEach((delay) => {
+        window.setTimeout(scrollToTop, delay);
+      });
+    })();
+    </script>
+    """
+
+
+def render_scroll_to_top() -> None:
+    """Scroll the Streamlit content pane to its beginning after navigation."""
+    components.html(scroll_to_top_html(), height=0, scrolling=False)
 
 
 @lru_cache(maxsize=1)

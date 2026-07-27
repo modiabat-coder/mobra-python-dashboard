@@ -556,6 +556,12 @@ def test_login_gate_and_logout_streamlit_smoke(monkeypatch: pytest.MonkeyPatch) 
     app = AppTest.from_file(str(ROOT / "app.py")).run(timeout=30)
     assert not app.exception
     assert [item.label for item in app.text_input] == ["Username", "Password"]
+    assert [item.key for item in app.text_input] == [
+        "mobra_login_username",
+        "mobra_login_password",
+    ]
+    assert app.text_input[0].max_chars == 128
+    assert app.text_input[1].max_chars == 256
     assert not app.radio
     app.text_input[0].set_value("reviewer")
     app.text_input[1].set_value("test-password")
@@ -843,6 +849,58 @@ def test_streamlit_app_smoke() -> None:
     assert app.radio[0].label == "Navigation"
     assert app.radio[0].value == "Home"
     assert any("Risk Matrix & Heatmap" in option for option in app.radio[0].options)
+
+
+def test_refresh_view_preserves_active_assessment() -> None:
+    """Refresh the interface without clearing application-owned session data."""
+    from streamlit.testing.v1 import AppTest
+
+    app = AppTest.from_file(str(ROOT / "app.py"))
+    app.run(timeout=30)
+    before = app.session_state["mobra_data"]["last_updated"]
+    refresh = next(button for button in app.button if button.key == "mobra_refresh_view")
+    refresh.click().run(timeout=30)
+
+    assert not app.exception
+    assert app.session_state["mobra_data"]["last_updated"] == before
+    assert app.session_state["mobra_view_refreshed_at"]
+
+
+@pytest.mark.parametrize(
+    ("label", "destination"),
+    [
+        ("Open Risk Analysis", "Risk Analysis"),
+        ("Open Readiness Dashboard", "Readiness Dashboard"),
+        ("Open Mission Map", "Mission Map"),
+        ("Review Deployment Decision", "Deployment Decision"),
+        ("Open Reports and Export", "Reports and Export"),
+        ("Open Research & References", "Research and References"),
+    ],
+)
+def test_home_shortcut_buttons_update_navigation(
+    label: str,
+    destination: str,
+) -> None:
+    """Home-page shortcut buttons must update the keyed sidebar navigation."""
+    from streamlit.testing.v1 import AppTest
+
+    app = AppTest.from_file(str(ROOT / "app.py")).run(timeout=30)
+    shortcut = next(button for button in app.button if button.label == label)
+    shortcut.click().run(timeout=30)
+
+    assert not app.exception
+    assert app.radio[0].value == destination
+    assert app.session_state["active_page"] == destination
+
+
+def test_scroll_to_top_component_targets_streamlit_content() -> None:
+    """Navigation scrolling must target the main Streamlit content pane."""
+    from ui.components import scroll_to_top_html
+
+    markup = scroll_to_top_html()
+    assert '[data-testid="stMain"]' in markup
+    assert "scrollTo({ top: 0" in markup
+    assert "requestAnimationFrame" in markup
 
 
 def test_every_application_page_smoke() -> None:

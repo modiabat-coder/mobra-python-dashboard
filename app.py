@@ -15,9 +15,10 @@ from mobra.config import APP_FULL_NAME, APP_NAME, FAVICON_PATH
 from mobra.io import read_data_file
 from mobra.reporting import csv_bytes
 from mobra.security import spreadsheet_safe_frame
+from ui.components import render_scroll_to_top
 from ui.layout import render_sidebar
 from ui.pages import build_assessment_context, render_page
-from ui.state import active_data, initialize_session_state
+from ui.state import SCROLL_TO_TOP_KEY, active_data, initialize_session_state
 from ui.styles import apply_global_styles
 
 
@@ -83,7 +84,10 @@ def main() -> None:
         context.requirement_result,
     )
     render_logout_control(auth_config)
+    should_scroll_to_top = bool(st.session_state.pop(SCROLL_TO_TOP_KEY, False))
     render_page(page, context)
+    if should_scroll_to_top:
+        render_scroll_to_top()
 
 
 if __name__ == "__main__":
