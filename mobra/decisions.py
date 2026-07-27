@@ -14,6 +14,7 @@ from .config import (
     count_phrase,
 )
 from .readiness import failed_critical_controls
+from .risk import classify_risk
 
 
 @dataclass(frozen=True)
@@ -187,3 +188,65 @@ def deployment_decision(
         "All critical controls are satisfied, no Extreme residual risk exists, "
         "required evidence is available, and core readiness requirements are met."
     ]
+
+
+def evaluate_deployment_decision(
+    bri: float,
+    residual_risk_score: int,
+    critical_control_passed: bool,
+    *,
+    high_risk_action_documented: bool = True,
+    policy: DeploymentPolicy | None = None,
+) -> tuple[str, list[str]]:
+    """Evaluate one calculator scenario through the central deployment function.
+
+    This adapter intentionally builds the smallest valid assessment context and
+    delegates all decision rules to :func:`deployment_decision`; the UI does not
+    maintain a second copy of safety-critical thresholds or override logic.
+    """
+    try:
+        bri_value = float(bri)
+        risk_value = float(residual_risk_score)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("BRI and residual risk score must be numeric.") from exc
+    if pd.isna(bri_value) or not 0 <= bri_value <= 100:
+        raise ValueError("BRI must be between 0 and 100.")
+    if (
+        pd.isna(risk_value)
+        or not risk_value.is_integer()
+        or not 1 <= risk_value <= 25
+    ):
+        raise ValueError("Residual risk score must be an integer from 1 to 25.")
+    if not isinstance(critical_control_passed, bool):
+        raise ValueError("Critical-control status must be True or False.")
+
+    risk_category = classify_risk(int(risk_value))
+    hazards = pd.DataFrame(
+        {
+            "risk_category": [risk_category],
+            "residual_risk_category": [risk_category],
+            "decision_risk_category": [risk_category],
+            "decision_risk_source": ["Residual risk"],
+            "corrective_action": [
+                "Documented mitigation action"
+                if high_risk_action_documented
+                else "Not provided"
+            ],
+        }
+    )
+    requirements = pd.DataFrame(
+        {
+            "requirement": ["Mission-critical containment control"],
+            "observed_score": [5 if critical_control_passed else 4],
+            "maximum_score": [5],
+            "critical_control": [True],
+            "objective_evidence": ["Verified"],
+            "applicable": [True],
+        }
+    )
+    return deployment_decision(
+        hazards,
+        requirements,
+        bri_value,
+        policy=policy,
+    )

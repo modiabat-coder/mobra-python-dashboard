@@ -100,6 +100,12 @@ REQUIREMENT_ALIASES = {
     "objective_evidence": ["objective_evidence", "evidence", "evidence_description"],
     "observed_score": ["observed_score", "observed", "score", "actual_score"],
     "maximum_score": ["maximum_score", "maximum", "max_score", "possible_score"],
+    "applicable": [
+        "applicable",
+        "is_applicable",
+        "requirement_applicable",
+        "included_in_assessment",
+    ],
     "critical_control": ["critical_control", "mission_critical", "critical", "is_critical"],
     "compliance_status": ["compliance_status", "status", "compliance"],
     "corrective_action": ["corrective_action", "recommended_action", "action"],
@@ -318,6 +324,39 @@ def _parse_boolean(series: pd.Series, result: ValidationResult) -> pd.Series:
     return normalized.isin(true_values)
 
 
+def _parse_applicability(series: pd.Series, result: ValidationResult) -> pd.Series:
+    """Parse optional applicability flags while defaulting blank values to included."""
+    normalized = series.astype("string").str.strip().str.lower()
+    true_values = {"true", "1", "yes", "y", "applicable", "included"}
+    false_values = {
+        "false",
+        "0",
+        "no",
+        "n",
+        "not applicable",
+        "n/a",
+        "na",
+        "excluded",
+    }
+    blank = series.isna() | normalized.eq("")
+    unknown = ~blank & ~normalized.isin(true_values | false_values)
+    if unknown.any():
+        count = int(unknown.sum())
+        result.invalid_rows.extend(series.index[unknown].tolist())
+        result.errors.append(
+            f"{count_phrase(count, 'applicability flag')} "
+            f"{'was' if count == 1 else 'were'} not recognized; "
+            "use applicable/not applicable, yes/no, or 1/0."
+        )
+    if blank.any():
+        count = int(blank.sum())
+        result.warnings.append(
+            f"{count_phrase(count, 'applicability flag')} "
+            f"{'is' if count == 1 else 'are'} blank and treated as applicable."
+        )
+    return normalized.isin(true_values) | blank | unknown
+
+
 def validate_requirements(df: pd.DataFrame, overrides: Mapping[str, str] | None = None) -> ValidationResult:
     """Map and validate ORL requirement records and derive readiness fields."""
     out = _apply_aliases(df, REQUIREMENT_ALIASES, overrides)
@@ -340,10 +379,22 @@ def validate_requirements(df: pd.DataFrame, overrides: Mapping[str, str] | None 
             f"{'is' if blank_ids == 1 else 'are'} blank."
         )
 
+    if "applicable" in out.columns:
+        out["applicable"] = _parse_applicability(out["applicable"], result)
+    else:
+        out["applicable"] = True
+    applicable = out["applicable"].astype(bool)
+
     observed = pd.to_numeric(out["observed_score"], errors="coerce")
     maximum = pd.to_numeric(out["maximum_score"], errors="coerce")
     out["observed_score"], out["maximum_score"] = observed, maximum
-    invalid = observed.isna() | maximum.isna() | (maximum <= 0) | (observed < 0) | (observed > maximum)
+    invalid = applicable & (
+        observed.isna()
+        | maximum.isna()
+        | (maximum <= 0)
+        | (observed < 0)
+        | (observed > maximum)
+    )
     if invalid.any():
         result.invalid_rows.extend(out.index[invalid].tolist())
         count = int(invalid.sum())
@@ -352,7 +403,7 @@ def validate_requirements(df: pd.DataFrame, overrides: Mapping[str, str] | None 
             "≥0, observed ≤ maximum, and maximum >0."
         )
     out["item_readiness_pct"] = 100 * observed / maximum
-    out.loc[invalid, "item_readiness_pct"] = np.nan
+    out.loc[invalid | ~applicable, "item_readiness_pct"] = np.nan
     if "domain" not in out.columns:
         out["domain"] = "General"
     if "objective_evidence" not in out.columns:
@@ -370,16 +421,27 @@ def validate_requirements(df: pd.DataFrame, overrides: Mapping[str, str] | None 
                 f"{'is' if count == 1 else 'are'} blank and treated as false."
             )
         out["critical_control"] = _parse_boolean(out["critical_control"], result)
-    out["evidence_missing"] = out["objective_evidence"].isna() | out["objective_evidence"].astype(str).str.strip().isin(["", "nan", "none", "not provided"])
+    out["evidence_missing"] = applicable & (
+        out["objective_evidence"].isna()
+        | out["objective_evidence"]
+        .astype(str)
+        .str.strip()
+        .str.lower()
+        .isin(["", "nan", "none", "not provided"])
+    )
     out["incomplete"] = invalid | out["evidence_missing"]
     calculated_status = pd.Series(
         np.where(
-            out["incomplete"],
-            "Incomplete",
+            ~applicable,
+            "Not applicable",
             np.where(
-                out["observed_score"] < out["maximum_score"],
-                "Below threshold",
-                "Compliant",
+                out["incomplete"],
+                "Incomplete",
+                np.where(
+                    out["observed_score"] < out["maximum_score"],
+                    "Below threshold",
+                    "Compliant",
+                ),
             ),
         ),
         index=out.index,
@@ -420,6 +482,7 @@ def validate_requirements(df: pd.DataFrame, overrides: Mapping[str, str] | None 
             | (threshold <= 0)
             | (threshold > maximum)
         )
+        invalid_threshold &= applicable
         if invalid_threshold.any():
             count = int(invalid_threshold.sum())
             result.invalid_rows.extend(out.index[invalid_threshold].tolist())

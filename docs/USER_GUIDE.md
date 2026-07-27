@@ -8,8 +8,11 @@ MOBRA — Mobile Operational Biosecurity Readiness Assessment — is an experime
 2. Enter optional assessment metadata in the sidebar.
 3. Review Data Validation findings and correct blocking errors.
 4. Review BRI, domain readiness, hazards, risk acceptance, mappings, and critical-control governance.
-5. Read the contextual interpretation boxes before relying on any result.
-6. Download the HTML report, JSON, CSV, Excel workbook, and optional backup package.
+5. Open **Equations & Calculations** to inspect the source equation, variables,
+   worked example, input limits, and calculator output. Treat future-development
+   and derived calculations according to their labels.
+6. Read the contextual interpretation boxes before relying on any result.
+7. Download the HTML report, JSON, CSV, Excel workbook, and optional backup package.
 
 Use **Refresh View** to rerun the current page while preserving session inputs where Streamlit permits. Use **Reset Assessment** only after confirming; it clears uploaded data, filters, calculated outputs, metadata, recipient fields, and selected attachments.
 
@@ -21,7 +24,27 @@ Resources and Contact generates the full 60-row ORL form, hazard register, blank
 
 Contact the author at [modiabat@gmail.com](mailto:modiabat@gmail.com) for scientific feedback, software issues, collaboration requests, data-integration questions, or general inquiries. The address is public metadata and is not an automatic assessment destination.
 
-The author-approved manuscript is available at `docs/MOBRA_Manuscript.pdf`. Resources and Contact shows its title, author, 22-page count, size, SHA-256, version note, historical 81.0% BRI distinction, and a stable download button. If a deployment omits the file, the application displays an unavailable message and does not fabricate a PDF. See [MANUSCRIPT_INTEGRATION.md](MANUSCRIPT_INTEGRATION.md).
+The checked-in manuscript is available at `docs/MOBRA_Manuscript.pdf`.
+**Research & Manuscript** shows its title, author, page count, size, SHA-256,
+version note, historical 81.0% BRI distinction, and a stable download button. If
+a deployment omits the file, the application displays an unavailable message and
+does not fabricate a PDF. The equation audit used the author-supplied 27-page
+revision dated 27 July 2026; equation traceability is documented in
+[EQUATION_AUDIT.md](EQUATION_AUDIT.md).
+
+## Equation calculators
+
+The equation page provides BRI, domain-readiness, evidence-completeness, risk,
+residual-risk, decision, longitudinal, and illustrative accuracy calculators.
+Inputs are validated and invalid denominators or out-of-range values display an
+error instead of producing a result. An optional `applicable` requirement column
+allows explicit not-applicable rows to be excluded from readiness numerators and
+denominators.
+
+The deployment simulator calls MOBRA's central decision function. A high BRI
+cannot bypass an Extreme residual risk or failed mission-critical control.
+Current 70% and 85% software-policy bands are not presented as universal
+manuscript thresholds.
 
 ## Email backup and privacy
 
@@ -38,4 +61,3 @@ MOBRA does not replace qualified biosafety/biosecurity professionals, institutio
 ## Visual identity and help
 
 The Home page uses the original MOBRA logo, version 0.9.0, prototype status, and current demonstration banner. Contextual help is rendered as Streamlit popovers when supported and as expanders otherwise. Notifications are guarded by session state so a rerun does not repeat every message. Educational poster cards, the poster package, the template catalogue, and branded backup/report outputs are available under Resources and Contact.
-# MOBRA User Guide

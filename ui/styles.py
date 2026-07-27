@@ -245,6 +245,11 @@ def apply_global_styles() -> None:
             border-radius: 10px;
             border-width: 1px;
         }}
+        .katex-display {{
+            overflow-x: auto;
+            overflow-y: hidden;
+            padding: .15rem 0 .25rem;
+        }}
         .mobra-hero {{
             background: var(--mobra-surface);
             border: 1px solid var(--mobra-border);
@@ -471,6 +476,31 @@ def apply_global_styles() -> None:
             line-height: 1.35;
             overflow-wrap: anywhere;
         }}
+        .mobra-equation-result {{
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1rem;
+            margin: .45rem 0 .8rem;
+            padding: .85rem 1rem;
+            background: var(--mobra-surface);
+            border: 1px solid var(--mobra-border);
+            border-left: 5px solid var(--mobra-secondary);
+            border-radius: var(--mobra-radius-sm);
+            box-shadow: var(--mobra-shadow);
+        }}
+        .mobra-equation-result span {{
+            color: var(--mobra-muted);
+            font-size: .82rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: .035em;
+        }}
+        .mobra-equation-result strong {{
+            color: var(--mobra-primary);
+            font-size: 1.12rem;
+            text-align: right;
+        }}
         .mobra-badge {{
             display: inline-flex;
             align-items: center;
@@ -607,6 +637,12 @@ def apply_global_styles() -> None:
                 flex-direction: column;
                 gap: .55rem;
             }}
+            .mobra-equation-result {{
+                align-items: flex-start;
+                flex-direction: column;
+                gap: .35rem;
+            }}
+            .mobra-equation-result strong {{ text-align: left; }}
         }}
         @media print {{
             [data-testid="stSidebar"], [data-testid="stHeader"] {{ display:none !important; }}

@@ -13,6 +13,17 @@ from openpyxl import load_workbook
 import mobra.io as io_module
 from mobra.acceptance import RiskAcceptancePolicy, apply_risk_acceptance
 from mobra.auth import hash_password, load_auth_config, verify_password
+from mobra.calculations import (
+    calculate_accuracy,
+    calculate_bri_change,
+    calculate_bri_from_counts,
+    calculate_capa_closure,
+    calculate_control_effectiveness,
+    calculate_domain_readiness_from_totals,
+    calculate_evidence_completeness,
+    calculate_relative_bri_improvement,
+    calculate_weighted_bri,
+)
 from mobra.config import (
     DECISION_CONDITIONAL,
     DECISION_DO_NOT_DEPLOY,
@@ -30,6 +41,7 @@ from mobra.decisions import (
     decision_risk_basis,
     decision_risk_values,
     deployment_decision,
+    evaluate_deployment_decision,
 )
 from mobra.educational_media import (
     educational_media_package,
@@ -58,7 +70,13 @@ from mobra.resources import (
     load_supporting_literature,
     validate_resource_manifest,
 )
-from mobra.risk import assert_heatmap_total, classify_risk, heatmap_counts, heatmap_total
+from mobra.risk import (
+    assert_heatmap_total,
+    calculate_residual_risk,
+    classify_risk,
+    heatmap_counts,
+    heatmap_total,
+)
 from mobra.security import spreadsheet_safe_frame
 from mobra.validation import (
     suggest_column_mapping,
@@ -66,6 +84,7 @@ from mobra.validation import (
     validate_requirements,
 )
 from ui.components import metric_grid_html
+from ui.equations import CORE_EQUATIONS
 from ui.layout import PAGE_ORDER
 
 
@@ -116,6 +135,122 @@ def test_observed_score_above_maximum_is_reported() -> None:
     result = validate_requirements(pd.DataFrame({"requirement": ["x"], "observed_score": [6], "maximum_score": [5]}))
     assert not result.ok
     assert "invalid requirement" in result.errors[0].lower()
+
+
+def test_bri_excludes_explicitly_not_applicable_requirements() -> None:
+    requirements = pd.DataFrame(
+        {
+            "observed_score": [5, 4, pd.NA],
+            "maximum_score": [5, 5, pd.NA],
+            "applicable": [True, True, False],
+        }
+    )
+    assert calculate_bri(requirements) == 90.0
+
+
+def test_requirement_validation_accepts_not_applicable_blank_scores() -> None:
+    result = validate_requirements(
+        pd.DataFrame(
+            {
+                "requirement": ["assessed", "mission-specific exclusion"],
+                "observed_score": [4, pd.NA],
+                "maximum_score": [5, pd.NA],
+                "applicable": ["yes", "not applicable"],
+                "objective_evidence": ["Verified", pd.NA],
+            }
+        )
+    )
+    assert result.ok
+    assert result.data["applicable"].tolist() == [True, False]
+    assert result.data["compliance_status"].tolist() == [
+        "Below threshold",
+        "Not applicable",
+    ]
+    assert result.data["evidence_missing"].tolist() == [False, False]
+    assert calculate_bri(result.data) == 80.0
+
+
+def test_bri_calculator_examples_and_domain_readiness() -> None:
+    maximum, bri = calculate_bri_from_counts(60, 5, 246)
+    assert maximum == 300
+    assert bri == 82.0
+    adjusted_maximum, adjusted_bri = calculate_bri_from_counts(56, 5, 230)
+    assert adjusted_maximum == 280
+    assert adjusted_bri == pytest.approx(82.142857)
+    assert calculate_domain_readiness_from_totals(31, 40) == 77.5
+
+
+@pytest.mark.parametrize(
+    ("count", "maximum", "observed"),
+    [
+        (0, 5, 0),
+        (10, 0, 0),
+        (10, 5, -1),
+        (10, 5, 51),
+    ],
+)
+def test_bri_calculator_rejects_invalid_inputs(
+    count: int,
+    maximum: float,
+    observed: float,
+) -> None:
+    with pytest.raises(ValueError):
+        calculate_bri_from_counts(count, maximum, observed)
+
+
+def test_manuscript_supporting_calculations() -> None:
+    assert calculate_evidence_completeness(48, 60) == 80.0
+    assert calculate_weighted_bri([4, 3, 5], [5, 5, 5], [1, 2, 1]) == 75.0
+    assert calculate_control_effectiveness(20, 8) == 60.0
+    assert calculate_bri_change(70, 82) == 12.0
+    assert calculate_relative_bri_improvement(70, 82) == pytest.approx(17.142857)
+    assert calculate_capa_closure(18, 24) == 75.0
+    assert calculate_accuracy(285, 320) == pytest.approx(89.0625)
+
+
+def test_residual_risk_calculation_and_validation() -> None:
+    assert calculate_residual_risk(2, 4) == 8
+    with pytest.raises(ValueError):
+        calculate_residual_risk(0, 4)
+    with pytest.raises(ValueError):
+        calculate_residual_risk(2.5, 4)
+
+
+@pytest.mark.parametrize("score", range(1, 26))
+def test_every_risk_score_from_one_to_twenty_five_is_classified(score: int) -> None:
+    assert classify_risk(score) in {"Low", "Moderate", "High", "Extreme"}
+
+
+def test_deployment_simulator_reuses_critical_and_extreme_overrides() -> None:
+    critical_decision, critical_reasons = evaluate_deployment_decision(99, 2, False)
+    extreme_decision, extreme_reasons = evaluate_deployment_decision(99, 20, True)
+    assert critical_decision == DECISION_DO_NOT_DEPLOY
+    assert any("critical control" in reason for reason in critical_reasons)
+    assert extreme_decision == DECISION_DO_NOT_DEPLOY
+    assert any("Extreme residual risk" in reason for reason in extreme_reasons)
+
+
+def test_deployment_simulator_valid_high_bri_scenario() -> None:
+    decision, reasons = evaluate_deployment_decision(90, 4, True)
+    assert decision == DECISION_READY
+    assert reasons
+
+
+def test_equation_cards_are_source_traceable_and_mark_residual_as_derived() -> None:
+    assert len(CORE_EQUATIONS) == 5
+    assert all(equation["source"] for equation in CORE_EQUATIONS)
+    residual = next(
+        equation for equation in CORE_EQUATIONS if equation["name"] == "Residual Risk"
+    )
+    assert "Derived" in residual["source"]
+
+
+def test_equation_layout_has_mobile_and_math_overflow_safeguards() -> None:
+    styles = (ROOT / "ui" / "styles.py").read_text(encoding="utf-8")
+    assert ".katex-display" in styles
+    assert ".mobra-equation-result" in styles
+    assert "overflow-x: auto" in styles
+    assert "flex-direction: column" in styles
 
 
 def test_missing_required_columns_are_reported() -> None:
@@ -496,7 +631,7 @@ def test_metric_grid_has_responsive_structure() -> None:
     assert "--metric-columns:4" in html
 
 
-def test_navigation_preserves_twelve_pages_and_adds_two_controlled_views() -> None:
+def test_navigation_preserves_twelve_pages_and_adds_three_controlled_views() -> None:
     original_pages = {
         "Home",
         "Data Import",
@@ -511,10 +646,14 @@ def test_navigation_preserves_twelve_pages_and_adds_two_controlled_views() -> No
         "Methodology",
         "About MOBRA",
     }
-    assert len(PAGE_ORDER) == 14
-    assert len(set(PAGE_ORDER)) == 14
+    assert len(PAGE_ORDER) == 15
+    assert len(set(PAGE_ORDER)) == 15
     assert original_pages.issubset(PAGE_ORDER)
-    assert {"Mission Map", "Research and References"}.issubset(PAGE_ORDER)
+    assert {
+        "Mission Map",
+        "Equations & Calculations",
+        "Research and References",
+    }.issubset(PAGE_ORDER)
 
 
 def test_password_hash_round_trip_and_rejects_wrong_password() -> None:
@@ -874,6 +1013,7 @@ def test_refresh_view_preserves_active_assessment() -> None:
         ("Open Mission Map", "Mission Map"),
         ("Review Deployment Decision", "Deployment Decision"),
         ("Open Reports and Export", "Reports and Export"),
+        ("Open Equations & Calculations", "Equations & Calculations"),
         ("Open Research & References", "Research and References"),
     ],
 )
@@ -919,6 +1059,7 @@ def test_every_application_page_smoke() -> None:
         "Deployment Decision",
         "Corrective Actions",
         "Reports and Export",
+        "Equations & Calculations",
         "Methodology",
         "Research and References",
         "About MOBRA",

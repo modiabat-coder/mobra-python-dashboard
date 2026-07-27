@@ -5,11 +5,29 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
+from .calculations import (
+    calculate_bri_from_totals,
+    calculate_domain_readiness_from_totals,
+)
+
+
+def _applicable_mask(requirements: pd.DataFrame) -> pd.Series:
+    """Return the rows that belong in readiness numerators and denominators."""
+    if "applicable" not in requirements.columns:
+        return pd.Series(True, index=requirements.index, dtype=bool)
+    flags = requirements["applicable"]
+    if flags.dtype == bool:
+        return flags.fillna(True)
+    normalized = flags.astype("string").str.strip().str.lower()
+    false_values = {"false", "0", "no", "n", "not applicable", "n/a", "na"}
+    return ~normalized.isin(false_values)
+
 
 def _valid_requirements(requirements: pd.DataFrame) -> pd.DataFrame:
     if not {"observed_score", "maximum_score"}.issubset(requirements.columns):
         return requirements.iloc[0:0]
-    valid = requirements["observed_score"].notna() & requirements["maximum_score"].notna()
+    valid = _applicable_mask(requirements)
+    valid &= requirements["observed_score"].notna() & requirements["maximum_score"].notna()
     valid &= requirements["maximum_score"] > 0
     valid &= requirements["observed_score"] >= 0
     valid &= requirements["observed_score"] <= requirements["maximum_score"]
@@ -17,17 +35,17 @@ def _valid_requirements(requirements: pd.DataFrame) -> pd.DataFrame:
 
 
 def calculate_bri(requirements: pd.DataFrame) -> float:
-    """Calculate weighted BRI as observed points divided by maximum points."""
+    """Calculate the current unweighted BRI as observed points over maximum points."""
     valid = _valid_requirements(requirements)
     maximum = float(valid["maximum_score"].sum()) if not valid.empty else 0.0
     if maximum <= 0:
         return float("nan")
     observed = float(valid["observed_score"].sum())
-    return float(np.clip(100 * observed / maximum, 0, 100))
+    return float(np.clip(calculate_bri_from_totals(observed, maximum), 0, 100))
 
 
 def domain_readiness(requirements: pd.DataFrame) -> pd.DataFrame:
-    """Calculate weighted readiness for each operational domain."""
+    """Calculate score-ratio readiness for each operational domain."""
     valid = _valid_requirements(requirements).copy()
     if "domain" not in valid.columns:
         valid["domain"] = "General"
@@ -39,7 +57,13 @@ def domain_readiness(requirements: pd.DataFrame) -> pd.DataFrame:
     if result.empty:
         result["readiness_pct"] = pd.Series(dtype=float)
         return result
-    result["readiness_pct"] = 100 * result["observed_score"] / result["maximum_score"]
+    result["readiness_pct"] = result.apply(
+        lambda row: calculate_domain_readiness_from_totals(
+            row["observed_score"],
+            row["maximum_score"],
+        ),
+        axis=1,
+    )
     return result.sort_values("readiness_pct", ascending=True).reset_index(drop=True)
 
 
@@ -52,7 +76,7 @@ def failed_critical_controls(requirements: pd.DataFrame) -> pd.DataFrame:
         parsed_flags = flags.fillna(False)
     else:
         parsed_flags = flags.astype("string").str.strip().str.lower().isin(["true", "1", "yes", "y", "critical"])
-    critical = requirements[parsed_flags].copy()
+    critical = requirements[parsed_flags & _applicable_mask(requirements)].copy()
     if critical.empty:
         return critical
     maximum = pd.to_numeric(critical["maximum_score"], errors="coerce")

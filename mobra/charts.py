@@ -510,7 +510,7 @@ def primary_bri_dial_figure(
 
 
 def domain_figure(domains: pd.DataFrame) -> go.Figure:
-    """Show weighted readiness for each available operational domain."""
+    """Show score-ratio readiness for each available operational domain."""
     data = domains.sort_values("readiness_pct", ascending=True)
     figure = px.bar(
         data,
