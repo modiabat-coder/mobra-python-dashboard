@@ -3,6 +3,9 @@ __pycache__/
 .pytest_cache/
 *.pyc
 .DS_Store
+.env
+.env.*
+!.env.example
 .streamlit/secrets.toml
 
 MOBRA_v1.0.0_Final_Release/

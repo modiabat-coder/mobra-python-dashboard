@@ -55,9 +55,30 @@ def failed_critical_controls(requirements: pd.DataFrame) -> pd.DataFrame:
     critical = requirements[parsed_flags].copy()
     if critical.empty:
         return critical
-    threshold = critical.get("critical_threshold", critical["maximum_score"])
+    maximum = pd.to_numeric(critical["maximum_score"], errors="coerce")
+    if "critical_threshold" in critical.columns:
+        raw_threshold = critical["critical_threshold"]
+        threshold = pd.to_numeric(raw_threshold, errors="coerce")
+        supplied = (
+            raw_threshold.notna()
+            & raw_threshold.astype("string").str.strip().ne("")
+        )
+        invalid_threshold = supplied & (
+            threshold.isna()
+            | maximum.isna()
+            | (threshold <= 0)
+            | (threshold > maximum)
+        )
+        effective_threshold = threshold.where(
+            threshold.notna() & (threshold > 0) & (threshold <= maximum),
+            maximum,
+        )
+    else:
+        invalid_threshold = pd.Series(False, index=critical.index)
+        effective_threshold = maximum
     failed = critical["observed_score"].isna() | critical["maximum_score"].isna()
-    failed |= critical["observed_score"] < threshold.fillna(critical["maximum_score"])
+    failed |= invalid_threshold
+    failed |= critical["observed_score"] < effective_threshold
     if "incomplete" in critical.columns:
         failed |= critical["incomplete"].fillna(False).astype(bool)
     return critical.loc[failed]

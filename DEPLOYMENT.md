@@ -61,11 +61,12 @@ optional application login described below.
 ## Test
 
 ```powershell
+python -m pip install -r requirements-dev.txt
 python -m pytest -q -p no:cacheprovider
 python generate_demo_report.py
 ```
 
-Expected automated result for this release: 62 tests passed.
+Expected automated result for this release: 71 tests passed.
 
 The regenerated demonstration report is written to
 `MOBRA_Demo_Report.html`.
@@ -77,7 +78,8 @@ The regenerated demonstration report is written to
   written back to source files by the application.
 - No database, remote API, external incident feed, or external index service is
   configured.
-- JSON uploads are limited to 50 MB by the application.
+- CSV, XLSX, XLS, and JSON uploads are limited to 50 MB by both Streamlit and
+  the application parser.
 - Legacy XLS reading uses `xlrd`; exported workbooks use XLSX.
 
 ## Configuration and secrets

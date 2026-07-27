@@ -10,7 +10,7 @@ from typing import Any
 
 import pandas as pd
 
-from .config import SUPPORTED_EXTENSIONS
+from .config import MAX_UPLOAD_BYTES, SUPPORTED_EXTENSIONS
 
 
 def _duplicate_headers(values: list[object]) -> list[str]:
@@ -39,23 +39,55 @@ def _raise_for_duplicate_headers(values: list[object]) -> None:
         )
 
 
+def _known_source_size(source: Any) -> int | None:
+    """Return a source size without reading its contents when possible."""
+    if isinstance(source, (bytes, bytearray)):
+        return len(source)
+    if isinstance(source, (str, Path)):
+        return Path(source).stat().st_size
+    size = getattr(source, "size", None)
+    if isinstance(size, int):
+        return size
+    if hasattr(source, "getbuffer"):
+        try:
+            return int(source.getbuffer().nbytes)
+        except (AttributeError, TypeError, ValueError):
+            return None
+    return None
+
+
+def _raise_for_oversized_source(size: int | None) -> None:
+    if size is not None and size > MAX_UPLOAD_BYTES:
+        limit_mb = MAX_UPLOAD_BYTES // (1024 * 1024)
+        raise ValueError(
+            f"The selected file exceeds {limit_mb} MB. "
+            "Split it into smaller assessment files before import."
+        )
+
+
 def source_bytes(source: Any) -> bytes:
     """Return bytes from a path, uploaded-file object, or bytes-like value."""
+    _raise_for_oversized_source(_known_source_size(source))
     if isinstance(source, bytes):
-        return source
-    if isinstance(source, bytearray):
-        return bytes(source)
-    if isinstance(source, (str, Path)):
-        return Path(source).read_bytes()
-    if hasattr(source, "getvalue"):
-        return source.getvalue()
-    if hasattr(source, "read"):
+        data = source
+    elif isinstance(source, bytearray):
+        data = bytes(source)
+    elif isinstance(source, (str, Path)):
+        data = Path(source).read_bytes()
+    elif hasattr(source, "getvalue"):
+        data = source.getvalue()
+    elif hasattr(source, "read"):
         position = source.tell() if hasattr(source, "tell") else None
         data = source.read()
         if position is not None and hasattr(source, "seek"):
             source.seek(position)
-        return data
-    raise TypeError("Expected a file path, bytes, or an uploaded file object.")
+    else:
+        raise TypeError("Expected a file path, bytes, or an uploaded file object.")
+    if not isinstance(data, (bytes, bytearray)):
+        raise TypeError("The selected file did not provide binary content.")
+    result = bytes(data)
+    _raise_for_oversized_source(len(result))
+    return result
 
 
 def source_name(source: Any, fallback: str = "uploaded_file") -> str:
@@ -154,10 +186,6 @@ def read_json_collections(source: Any) -> dict[str, pd.DataFrame]:
     data = source_bytes(source)
     if not data:
         raise ValueError("The JSON file is empty.")
-    if len(data) > 50 * 1024 * 1024:
-        raise ValueError(
-            "The JSON file exceeds 50 MB. Split it into smaller record collections before import."
-        )
     try:
         payload = json.loads(data.decode("utf-8-sig"))
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:

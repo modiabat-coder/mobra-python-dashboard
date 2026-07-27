@@ -8,7 +8,7 @@ from typing import Mapping
 import numpy as np
 import pandas as pd
 
-from .config import count_phrase
+from .config import RISK_LEVELS, count_phrase
 from .risk import calculate_risk_score, classify_risk, valid_scale
 
 
@@ -250,6 +250,7 @@ def validate_hazards(df: pd.DataFrame, overrides: Mapping[str, str] | None = Non
         if optional not in out.columns:
             out[optional] = "Not provided"
     residual_present = {"residual_likelihood", "residual_consequence"}.intersection(out.columns)
+    residual_valid = pd.Series(False, index=out.index)
     if residual_present and residual_present != {"residual_likelihood", "residual_consequence"}:
         result.warnings.append("Only one residual-risk field was supplied; residual risk was not calculated.")
     if residual_present == {"residual_likelihood", "residual_consequence"}:
@@ -264,6 +265,17 @@ def validate_hazards(df: pd.DataFrame, overrides: Mapping[str, str] | None = Non
                     "use integers from 1 to 5."
                 )
                 result.invalid_rows.extend(out.index[invalid].tolist())
+        incomplete_pair = (
+            out["residual_likelihood"].notna()
+            ^ out["residual_consequence"].notna()
+        )
+        if incomplete_pair.any():
+            count = int(incomplete_pair.sum())
+            result.warnings.append(
+                f"{count_phrase(count, 'residual-risk pair')} "
+                f"{'is' if count == 1 else 'are'} incomplete; "
+                "the initial calculated risk is used for those records."
+            )
         residual_valid = out["residual_likelihood"].map(valid_scale) & out["residual_consequence"].map(valid_scale)
         out["residual_risk_score"] = calculate_risk_score(out["residual_likelihood"], out["residual_consequence"])
         out.loc[~residual_valid, "residual_risk_score"] = np.nan
@@ -271,6 +283,19 @@ def validate_hazards(df: pd.DataFrame, overrides: Mapping[str, str] | None = Non
     else:
         out["residual_risk_score"] = np.nan
         out["residual_risk_category"] = "Not provided"
+    out["decision_risk_score"] = out["residual_risk_score"].where(
+        residual_valid,
+        out["risk_score"],
+    )
+    out["decision_risk_category"] = out["residual_risk_category"].where(
+        out["residual_risk_category"].isin(RISK_LEVELS),
+        out["risk_category"],
+    )
+    out["decision_risk_source"] = np.where(
+        residual_valid,
+        "Residual risk",
+        "Initial calculated risk",
+    )
     _parse_dates(out, result)
     result.data = out
     result.invalid_rows = sorted(set(result.invalid_rows))
@@ -284,9 +309,11 @@ def _parse_boolean(series: pd.Series, result: ValidationResult) -> pd.Series:
     unknown = series.notna() & ~normalized.isin(true_values | false_values)
     if unknown.any():
         count = int(unknown.sum())
-        result.warnings.append(
+        result.invalid_rows.extend(series.index[unknown].tolist())
+        result.errors.append(
             f"{count_phrase(count, 'critical-control flag')} "
-            f"{'was' if count == 1 else 'were'} not recognized and treated as false."
+            f"{'was' if count == 1 else 'were'} not recognized; "
+            "use true/false, yes/no, or 1/0."
         )
     return normalized.isin(true_values)
 
@@ -345,13 +372,62 @@ def validate_requirements(df: pd.DataFrame, overrides: Mapping[str, str] | None 
         out["critical_control"] = _parse_boolean(out["critical_control"], result)
     out["evidence_missing"] = out["objective_evidence"].isna() | out["objective_evidence"].astype(str).str.strip().isin(["", "nan", "none", "not provided"])
     out["incomplete"] = invalid | out["evidence_missing"]
-    if "compliance_status" not in out.columns:
-        out["compliance_status"] = np.where(out["incomplete"], "Incomplete", np.where(out["observed_score"] < out["maximum_score"], "Below threshold", "Compliant"))
+    calculated_status = pd.Series(
+        np.where(
+            out["incomplete"],
+            "Incomplete",
+            np.where(
+                out["observed_score"] < out["maximum_score"],
+                "Below threshold",
+                "Compliant",
+            ),
+        ),
+        index=out.index,
+        dtype="string",
+    )
+    if "compliance_status" in out.columns:
+        reported_status = out["compliance_status"].copy()
+        out["reported_compliance_status"] = reported_status
+        meaningful = (
+            reported_status.notna()
+            & reported_status.astype("string").str.strip().ne("")
+        )
+        conflicts = meaningful & (
+            reported_status.astype("string").str.strip().str.casefold()
+            != calculated_status.str.casefold()
+        )
+        if conflicts.any():
+            count = int(conflicts.sum())
+            result.warnings.append(
+                f"{count_phrase(count, 'reported compliance status')} "
+                f"{'differs' if count == 1 else 'differ'} from the validated "
+                "score/evidence result; the calculated status is used for analysis."
+            )
+    out["compliance_status"] = calculated_status
     for optional in ("corrective_action", "responsible_person", "lifecycle_stage", "notes"):
         if optional not in out.columns:
             out[optional] = "Not provided"
     if "critical_threshold" in out.columns:
-        out["critical_threshold"] = pd.to_numeric(out["critical_threshold"], errors="coerce")
+        raw_threshold = out["critical_threshold"].copy()
+        threshold = pd.to_numeric(raw_threshold, errors="coerce")
+        supplied = (
+            raw_threshold.notna()
+            & raw_threshold.astype("string").str.strip().ne("")
+        )
+        invalid_threshold = supplied & (
+            threshold.isna()
+            | maximum.isna()
+            | (threshold <= 0)
+            | (threshold > maximum)
+        )
+        if invalid_threshold.any():
+            count = int(invalid_threshold.sum())
+            result.invalid_rows.extend(out.index[invalid_threshold].tolist())
+            result.errors.append(
+                f"{count_phrase(count, 'invalid critical threshold')}; "
+                "use a numeric value greater than 0 and no greater than maximum_score."
+            )
+        out["critical_threshold"] = threshold
     else:
         out["critical_threshold"] = out["maximum_score"]
     _parse_dates(out, result)

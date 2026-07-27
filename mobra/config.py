@@ -76,7 +76,7 @@ RISK_COLORS = {
 RISK_TEXT_COLORS = {
     "Low": "#FFFFFF",
     "Moderate": "#3D3100",
-    "High": "#FFFFFF",
+    "High": "#3D2300",
     "Extreme": "#FFFFFF",
     "Unknown": "#FFFFFF",
     "Invalid": "#FFFFFF",
@@ -85,7 +85,7 @@ RISK_TEXT_COLORS = {
 # Decision terminology is defined once and reused by logic, UI, reports, and tests.
 DECISION_DO_NOT_DEPLOY = "DO NOT DEPLOY"
 DECISION_CONDITIONAL = "CONDITIONAL DEPLOYMENT"
-DECISION_READY = "READY TO DEPLOY"
+DECISION_READY = "READY / DEPLOY"
 DECISION_LABELS = (
     DECISION_DO_NOT_DEPLOY,
     DECISION_CONDITIONAL,
@@ -103,14 +103,19 @@ DECISION_ICONS = {
 }
 
 RISK_LEVELS = ["Low", "Moderate", "High", "Extreme"]
+RISK_THRESHOLDS = {
+    "Low": (1, 4),
+    "Moderate": (5, 9),
+    "High": (10, 16),
+    "Extreme": (17, 25),
+}
 RISK_RANGES = {
-    "Low": "1\u20134",
-    "Moderate": "5\u20139",
-    "High": "10\u201316",
-    "Extreme": "17\u201325",
+    category: f"{minimum}\u2013{maximum}"
+    for category, (minimum, maximum) in RISK_THRESHOLDS.items()
 }
 
 SUPPORTED_EXTENSIONS = (".csv", ".xlsx", ".xls", ".json")
+MAX_UPLOAD_BYTES = 50 * 1024 * 1024
 SYNTHETIC_DATA_LABEL = "Synthetic Demonstration Data"
 UPLOADED_DATA_LABEL = "Uploaded Assessment Data"
 

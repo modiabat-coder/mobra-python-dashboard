@@ -14,6 +14,7 @@ from mobra.charts import bri_gauge, heatmap_figure
 from mobra.config import APP_FULL_NAME, APP_NAME, FAVICON_PATH
 from mobra.io import read_data_file
 from mobra.reporting import csv_bytes
+from mobra.security import spreadsheet_safe_frame
 from ui.layout import render_sidebar
 from ui.pages import build_assessment_context, render_page
 from ui.state import active_data, initialize_session_state
@@ -36,13 +37,21 @@ def excel_bytes(
     """Preserve the original three-sheet workbook helper for external callers."""
     buffer = io.BytesIO()
     with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
-        hazards.to_excel(writer, sheet_name="Analyzed_Hazards", index=False)
-        requirements.to_excel(
+        spreadsheet_safe_frame(hazards).to_excel(
+            writer,
+            sheet_name="Analyzed_Hazards",
+            index=False,
+        )
+        spreadsheet_safe_frame(requirements).to_excel(
             writer,
             sheet_name="Analyzed_Requirements",
             index=False,
         )
-        pd.DataFrame([summary]).to_excel(writer, sheet_name="Summary", index=False)
+        spreadsheet_safe_frame(pd.DataFrame([summary])).to_excel(
+            writer,
+            sheet_name="Summary",
+            index=False,
+        )
     return buffer.getvalue()
 
 

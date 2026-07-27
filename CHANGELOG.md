@@ -2,7 +2,7 @@
 
 All notable changes to MOBRA are documented in this file.
 
-## [Unreleased] - 2026-07-24
+## [Unreleased] - 2026-07-27
 
 ### Added
 
@@ -16,6 +16,12 @@ All notable changes to MOBRA are documented in this file.
   Laboratory Biosafety Manual, WHO biosecurity and mobile-laboratory guidance,
   BMBL sixth edition, ISO 35001, ISO 31000, and supporting literature.
 - Streamlit Secrets example and deployment instructions.
+- Per-record decision-risk selection with conservative initial-risk fallback
+  when residual values are unavailable.
+- Spreadsheet formula-injection protection, project-local archive path checks,
+  and uniform 50 MB upload enforcement.
+- Repository-level pytest discovery configuration and separate development
+  dependencies.
 
 ### Changed
 
@@ -25,13 +31,18 @@ All notable changes to MOBRA are documented in this file.
   visual identity and responsive navigation.
 - Extended navigation from twelve preserved views to fourteen by adding only
   Mission Map and Research & Manuscript.
+- Derived compliance labels now remain consistent with validated scores while
+  preserving any reported source label for traceability.
+- High-risk badge text now meets WCAG AA contrast against the approved orange.
 
 ### Verified
 
 - All twelve original views remain present.
 - Scientific invariants and non-bypassable decision logic remain unchanged.
-- 62 automated tests pass, including authentication, all fourteen pages,
-  gauges, map workflow, manuscript, and priority references.
+- 71 automated tests pass, including authentication, all fourteen pages,
+  partial residual-risk fallback, fail-closed Critical Control validation,
+  upload limits, export safety, gauges, map workflow, manuscript, and priority
+  references.
 
 ## [1.0.0] - 2026-07-23
 
@@ -57,7 +68,7 @@ All notable changes to MOBRA are documented in this file.
 ### Changed
 
 - Standardized deployment outcomes to DO NOT DEPLOY, CONDITIONAL DEPLOYMENT,
-  and READY TO DEPLOY.
+  and READY / DEPLOY.
 - Standardized user-facing singular/plural grammar.
 - Improved sidebar branding, concise navigation, long-filename wrapping,
   keyboard focus visibility, table readability, and report print behavior.

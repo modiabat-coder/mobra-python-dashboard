@@ -9,6 +9,7 @@ from collections.abc import Iterable, Mapping
 import pandas as pd
 
 from .export_contracts import EXCEL_SHEETS
+from .security import spreadsheet_safe_frame
 from .validation_findings import (
     VALIDATION_LIMITATION,
     ValidationFinding,
@@ -40,7 +41,7 @@ def excel_safe_frame(data: pd.DataFrame) -> pd.DataFrame:
                 else value
             )
         )
-    return out
+    return spreadsheet_safe_frame(out)
 
 
 def validation_json_fields(

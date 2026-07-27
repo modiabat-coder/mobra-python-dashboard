@@ -10,6 +10,13 @@ from pathlib import Path
 from typing import Any
 
 import pandas as pd
+
+from .config import PROJECT_ROOT
+from .security import (
+    resolve_within,
+    safe_archive_name,
+    spreadsheet_safe_frame,
+)
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
@@ -113,11 +120,15 @@ def resource_catalogue_frame(resources: Iterable[dict[str, Any]] | None = None) 
 
 
 def catalogue_csv_bytes(resources: Iterable[dict[str, Any]] | None = None) -> bytes:
-    return resource_catalogue_frame(resources).to_csv(index=False).encode("utf-8-sig")
+    return (
+        spreadsheet_safe_frame(resource_catalogue_frame(resources))
+        .to_csv(index=False)
+        .encode("utf-8-sig")
+    )
 
 
 def catalogue_xlsx_bytes(resources: Iterable[dict[str, Any]] | None = None) -> bytes:
-    frame = resource_catalogue_frame(resources)
+    frame = spreadsheet_safe_frame(resource_catalogue_frame(resources))
     workbook = Workbook()
     sheet = workbook.active
     sheet.title = "Normative_Resources"
@@ -154,9 +165,14 @@ def build_open_access_reference_package(resources: Iterable[dict[str, Any]] | No
                     "International Organization for Standardization"
                 )
             ):
-                path = Path(local_file)
+                path = resolve_within(PROJECT_ROOT, local_file)
                 if path.is_file():
-                    archive.write(path, arcname=path.name)
+                    archive.write(
+                        path,
+                        arcname=safe_archive_name(
+                            path.relative_to(PROJECT_ROOT).as_posix()
+                        ),
+                    )
                     included += 1
         archive.writestr(
             "README.txt",
